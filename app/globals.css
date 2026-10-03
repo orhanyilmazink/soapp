@@ -150,3 +150,10 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* iPhone / iOS PWA input zoom engelleme */
+input,
+textarea,
+select {
+  font-size: 16px !important;
+}
