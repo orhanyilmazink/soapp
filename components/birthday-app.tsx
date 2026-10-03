@@ -5,7 +5,7 @@ import { Heart, ScanFace } from 'lucide-react'
 import Image from 'next/image'
 import { BottomNav, type TabId } from '@/components/bottom-nav'
 import { FloatingHearts } from '@/components/floating-hearts'
-import { HomeTab } from '@/components/tabs/home-tab'
+import { HomeTab, type AppTheme } from '@/components/tabs/home-tab'
 import { CalendarTab } from '@/components/tabs/calendar-tab'
 import { AchievementsTab } from '@/components/tabs/achievements-tab'
 import { BucketListTab } from '@/components/tabs/bucket-list-tab'
@@ -16,6 +16,7 @@ const appPin = '0111'
 const rememberedUnlockKey = 'birthday-app-unlocked'
 const biometricCredentialKey = 'birthday-app-biometric-credential'
 const biometricPromptDismissedKey = 'birthday-app-biometric-prompt-dismissed'
+const themeStorageKey = 'soapp-theme'
 const maxBiometricAttempts = 2
 
 function randomChallenge() {
@@ -47,8 +48,22 @@ export function BirthdayApp() {
   const [biometricError, setBiometricError] = useState('')
   const [biometricFailures, setBiometricFailures] = useState(0)
   const [pinSetupFailed, setPinSetupFailed] = useState(false)
+  const [theme, setTheme] = useState<AppTheme>('light')
 
   const showBiometricButton = hasBiometric && biometricFailures < maxBiometricAttempts
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(themeStorageKey)
+    const nextTheme: AppTheme = savedTheme === 'dark' ? 'dark' : 'light'
+    document.documentElement.dataset.theme = nextTheme
+    setTheme(nextTheme)
+  }, [])
+
+  const changeTheme = (nextTheme: AppTheme) => {
+    localStorage.setItem(themeStorageKey, nextTheme)
+    document.documentElement.dataset.theme = nextTheme
+    setTheme(nextTheme)
+  }
 
   useEffect(() => {
     let active = true
@@ -283,7 +298,7 @@ export function BirthdayApp() {
 
   return (
     <SharedAppStateProvider>
-      <div className="relative min-h-dvh overflow-x-hidden bg-[radial-gradient(ellipse_at_top,rgba(244,114,182,0.1),transparent_32%),radial-gradient(ellipse_at_bottom_right,rgba(212,212,216,0.18),transparent_35%)]">
+      <div className="app-shell relative min-h-dvh overflow-x-hidden">
         <FloatingHearts />
         <main
           id={`panel-${tab}`}
@@ -292,7 +307,7 @@ export function BirthdayApp() {
           className="relative mx-auto w-full max-w-md px-5 pt-[max(env(safe-area-inset-top),1.5rem)] pb-32"
         >
           <div key={tab} className="animate-[fadeIn_0.35s_ease,slideIn_0.4s_cubic-bezier(0.22,1,0.36,1)]">
-            {tab === 'home' && <HomeTab />}
+            {tab === 'home' && <HomeTab theme={theme} onThemeChange={changeTheme} />}
             {tab === 'calendar' && <CalendarTab />}
             {tab === 'achievements' && <AchievementsTab />}
             {tab === 'todo' && <BucketListTab />}

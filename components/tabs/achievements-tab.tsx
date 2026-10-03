@@ -3,7 +3,11 @@
 import { useState } from 'react'
 import {
   Clapperboard,
+  Compass,
+  Crown,
+  Flame,
   Gamepad2,
+  Gem,
   Gift,
   Heart,
   LockKeyhole,
@@ -51,6 +55,9 @@ const achievements: Record<AchievementCategoryId, Achievement[]> = {
     { count: 500, title: '500 gün', detail: 'Her gün biraz daha yakın', icon: Sparkles },
     { count: 730, title: 'İki yıl', detail: 'Hikâyeniz büyümeye devam ediyor', icon: PartyPopper },
     { count: 1000, title: '1000 gün', detail: 'Bin gün, tek güzel hikâye', icon: Trophy },
+    { count: 1500, title: '1500 gün', detail: 'Birlikte nice mevsimler geride kaldı', icon: Crown },
+    { count: 2000, title: 'İki bin gün', detail: 'Her gün seçilen aynı güzel hikâye', icon: Gem },
+    { count: 3000, title: '3000 gün', detail: 'Bir ömre sığacak kadar çok anı', icon: Flame },
   ],
   games: [
     { count: 1, title: 'İlk oyun', detail: 'İlk ortak oyun macerası', icon: Gamepad2 },
@@ -58,6 +65,9 @@ const achievements: Record<AchievementCategoryId, Achievement[]> = {
     { count: 10, title: 'İlk 10 oyun', detail: 'Tatlı bir rekabet başladı', icon: Heart },
     { count: 25, title: 'Oyun arkadaşı', detail: '25 oyunda aynı takım', icon: Gift },
     { count: 50, title: 'Oyun gecesi ustaları', detail: 'Birlikte 50 oyun tamamlandı', icon: Trophy },
+    { count: 75, title: 'Rövanş bitmez', detail: 'Yetmiş beş oyunda aynı takım', icon: Flame },
+    { count: 100, title: 'Yüzüncü zafer', detail: 'Yüz oyuna ulaşmak sabır ister', icon: Crown },
+    { count: 150, title: 'Efsane ikili', detail: 'Yüz elli ortak oyun tamamlandı', icon: Gem },
   ],
   places: [
     { count: 1, title: 'İlk keşif', detail: 'İlk yeni yerinizi birlikte gördünüz', icon: MapPin },
@@ -65,6 +75,9 @@ const achievements: Record<AchievementCategoryId, Achievement[]> = {
     { count: 10, title: 'Gezgin çift', detail: '10 yerde ortak bir anı', icon: Heart },
     { count: 20, title: '20 yer, tek hikâye', detail: 'Birlikte nice yollar keşfettiniz', icon: Sparkles },
     { count: 50, title: '50 yer', detail: 'Birlikte keşfedilecek daha çok yer var', icon: PartyPopper },
+    { count: 75, title: 'Yolların ustası', detail: 'Yetmiş beş farklı yerde anı biriktirin', icon: Compass },
+    { count: 100, title: 'Yüz durak', detail: 'Yüz ayrı keşif, tek ortak hikâye', icon: Crown },
+    { count: 150, title: 'Dünya sizin', detail: 'Yüz elli yeni yer keşfedildi', icon: Gem },
   ],
   series: [
     { count: 1, title: 'İlk bölüm', detail: 'İlk dizinize birlikte başladınız', icon: Tv },
@@ -72,6 +85,9 @@ const achievements: Record<AchievementCategoryId, Achievement[]> = {
     { count: 5, title: 'Dizi keyfi', detail: 'Birlikte beş dizi tamamlandı', icon: Heart },
     { count: 10, title: 'Dizi maratonu', detail: 'On dizi, bolca güzel akşam', icon: Trophy },
     { count: 20, title: 'Jenerik ezberi', detail: 'Birlikte yirmi dizi macerası', icon: PartyPopper },
+    { count: 30, title: 'Bir bölüm daha', detail: 'Otuz dizi birlikte tamamlandı', icon: Flame },
+    { count: 50, title: 'Dizi arşivi', detail: 'Elli ortak dizi macerası', icon: Crown },
+    { count: 75, title: 'Jenerik uzmanları', detail: 'Yetmiş beş dizinin sonuna birlikte', icon: Gem },
   ],
   movies: [
     { count: 1, title: 'İlk film gecesi', detail: 'Atıştırmalıklar hazır', icon: Clapperboard },
@@ -79,6 +95,9 @@ const achievements: Record<AchievementCategoryId, Achievement[]> = {
     { count: 10, title: 'Film seçme ustaları', detail: 'On ortak film gecesi', icon: Star },
     { count: 25, title: 'Jenerik bitene kadar', detail: 'Yirmi beş film birlikte izlendi', icon: Gift },
     { count: 50, title: 'Sinema kulübü', detail: 'Ellinci filminiz kutlu olsun', icon: PartyPopper },
+    { count: 75, title: 'Yetmiş beş film', detail: 'Her film yeni bir ortak anı', icon: Flame },
+    { count: 100, title: 'Yüzüncü film', detail: 'Yüz film gecesini birlikte tamamlayın', icon: Crown },
+    { count: 150, title: 'Beyaz perde efsaneleri', detail: 'Yüz elli film, sayısız güzel sahne', icon: Gem },
   ],
   food: [
     { count: 1, title: 'İlk yeni lezzet', detail: 'İlk ortak tat keşfi', icon: UtensilsCrossed },
@@ -86,6 +105,9 @@ const achievements: Record<AchievementCategoryId, Achievement[]> = {
     { count: 10, title: 'Lezzet avcıları', detail: 'On farklı tat birlikte denendi', icon: Sparkles },
     { count: 20, title: 'Menüde ne varsa', detail: 'Yirmi yeni lezzet keşfedildi', icon: Gift },
     { count: 50, title: 'Gurme çift', detail: 'Birlikte elli lezzet anısı', icon: Trophy },
+    { count: 75, title: 'Lezzet kâşifleri', detail: 'Yetmiş beş yeni tat keşfedildi', icon: Flame },
+    { count: 100, title: 'Yüzüncü tat', detail: 'Yüz ayrı lezzeti birlikte deneyin', icon: Crown },
+    { count: 150, title: 'Gurme efsaneleri', detail: 'Yüz elli lezzet, ortak sofrada', icon: Gem },
   ],
 }
 
@@ -181,18 +203,11 @@ export function AchievementsTab() {
         </div>
       </section>
 
-      <section aria-labelledby="achievements-title" className="mt-2">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Star className="size-4 text-pink-400" aria-hidden="true" />
-            <h2 id="achievements-title" className="text-base font-bold text-zinc-900">Birlikte kazandıklarınız</h2>
-          </div>
-        </div>
-
+      <section aria-label="Başarım ayrıntıları" className="mt-2">
         <div
           role="tablist"
           aria-label="Başarım kategorileri"
-          className="mx-auto mb-3 flex max-w-md items-center gap-1 overflow-x-auto rounded-full border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(244,244,246,0.92))] p-1.5 shadow-[0_18px_40px_-22px_rgba(15,23,42,0.5),inset_0_1px_0_rgba(255,255,255,0.92)] backdrop-blur-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="mx-auto mb-3 flex w-full max-w-md items-center gap-1 rounded-full border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(244,244,246,0.92))] p-1.5 shadow-[0_18px_40px_-22px_rgba(15,23,42,0.5),inset_0_1px_0_rgba(255,255,255,0.92)] backdrop-blur-xl"
         >
           {categories.map(({ id, label, shortLabel, icon: CategoryIcon }) => {
             const isActive = activeCategory === id
@@ -205,7 +220,7 @@ export function AchievementsTab() {
                 aria-selected={isActive}
                 onClick={() => setActiveCategory(id)}
                 className={cn(
-                  'group relative flex min-h-14 w-[76px] shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full px-1 py-2 text-[10px] font-semibold transition-all duration-250 ease-out',
+                  'group relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full px-0.5 py-2 text-[9px] font-semibold transition-all duration-250 ease-out sm:text-[10px]',
                   isActive ? 'text-foreground' : 'scale-[0.94] text-zinc-500 hover:text-zinc-700'
                 )}
               >

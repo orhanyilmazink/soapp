@@ -97,7 +97,7 @@ export function BucketListTab() {
       <div
         role="group"
         aria-label="Kategoriler"
-        className="mx-auto mb-5 flex max-w-md items-center gap-1 overflow-x-auto rounded-full border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(244,244,246,0.92))] p-1.5 shadow-[0_18px_40px_-22px_rgba(15,23,42,0.5),inset_0_1px_0_rgba(255,255,255,0.92)] backdrop-blur-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="mx-auto mb-5 flex w-full max-w-md items-center gap-1 rounded-full border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(244,244,246,0.92))] p-1.5 shadow-[0_18px_40px_-22px_rgba(15,23,42,0.5),inset_0_1px_0_rgba(255,255,255,0.92)] backdrop-blur-xl"
       >
         <FilterChip active={filter === 'all'} onClick={() => changeFilter('all')} icon={LayoutGrid} label="Tümü" />
         {groups.map((g) => (
@@ -252,7 +252,7 @@ function FilterChip({
       aria-label={count ? `${label} ${count}` : label}
       title={label}
       className={cn(
-        'group relative flex min-h-14 w-[76px] shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full px-1 py-2 text-[10px] font-semibold transition-all duration-250 ease-out',
+        'group relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full px-0.5 py-2 text-[9px] font-semibold transition-all duration-250 ease-out sm:text-[10px]',
         active
           ? 'text-foreground'
           : 'scale-[0.94] text-zinc-500 hover:text-zinc-700'
