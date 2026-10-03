@@ -26,10 +26,10 @@ export function LetterTab() {
             <Cake className="size-9 animate-heartbeat text-primary" aria-hidden="true" />
           </div>
         </div>
-        <p className="font-script text-5xl font-bold leading-none text-foreground drop-shadow-[0_8px_18px_rgba(251,113,133,0.12)]">İyi ki Doğdun</p>
-        <p className="mt-1 font-script text-3xl font-medium text-primary">{config.partnerName}</p>
+        <p className="py-1 font-script text-5xl font-bold leading-[1.2] text-foreground drop-shadow-[0_8px_18px_rgba(251,113,133,0.12)]">İyi ki Doğdun</p>
+        <p className="mt-1 py-0.5 font-script text-3xl font-medium leading-tight text-primary">{config.partnerName}</p>
         <div className="surface-panel mt-5 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(255,247,249,0.8))] px-5 py-5 text-left">
-          <p className="text-[15px] leading-relaxed text-foreground text-pretty">{birthdayWish}</p>
+          <p className="font-serif text-[16px] leading-8 tracking-[0.01em] text-foreground text-pretty">{birthdayWish}</p>
         </div>
       </section>
 
@@ -101,7 +101,7 @@ function LockedEnvelope({ remaining }: { remaining: number }) {
       </Envelope>
 
       <section aria-label="Mektubun açılmasına kalan süre" className="surface-panel p-5 text-center">
-        <h2 className="text-sm font-bold text-muted-foreground">Açılmasına kalan süre</h2>
+        <h2 className="font-sans text-xs font-bold tracking-wide text-primary/80">Açılmasına kalan süre</h2>
         <dl className="mt-3 grid grid-cols-4 gap-2">
           {units.map((u) => (
             <div key={u.label} className="flex flex-col-reverse rounded-2xl bg-muted py-3">
@@ -110,7 +110,7 @@ function LockedEnvelope({ remaining }: { remaining: number }) {
             </div>
           ))}
         </dl>
-        <p className="mt-4 text-sm text-muted-foreground">Sabırsızlanma, en güzel şeyler beklemeye değer.</p>
+        <p className="mt-4 font-serif text-[16px] leading-7 tracking-[0.01em] text-muted-foreground">Sabırsızlanma, en güzel şeyler beklemeye değer.</p>
       </section>
     </div>
   )
@@ -150,7 +150,7 @@ function GiftBox() {
           <span className="flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
             <Sparkles className="size-7" aria-hidden="true" />
           </span>
-          <p className="font-script text-3xl font-bold leading-none text-primary">{gift.title}</p>
+          <p className="py-1 font-script text-3xl font-bold leading-[1.2] text-primary">{gift.title}</p>
           <p className="text-sm leading-relaxed text-foreground text-pretty">{gift.message}</p>
         </div>
       ) : (

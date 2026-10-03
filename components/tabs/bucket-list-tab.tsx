@@ -2,15 +2,11 @@
 
 import { useState } from 'react'
 import {
-  BookOpen,
   Check,
   Clapperboard,
   Gamepad2,
-  GraduationCap,
-  Heart,
   LayoutGrid,
   MapPin,
-  Music,
   Pencil,
   Plus,
   Trash2,
@@ -18,40 +14,32 @@ import {
   UtensilsCrossed,
 } from 'lucide-react'
 import { SectionHeader } from '@/components/section-header'
-import { categories, type CategoryId } from '@/lib/bucket-list'
+import { categories, type ActiveCategoryId } from '@/lib/bucket-list'
 import { useSharedBucketList } from '@/lib/shared-app-state'
 import { cn } from '@/lib/utils'
 
-const icons: Record<CategoryId, typeof MapPin> = {
+const icons: Record<ActiveCategoryId, typeof MapPin> = {
   places: MapPin,
   games: Gamepad2,
   series: Tv,
   movies: Clapperboard,
   food: UtensilsCrossed,
-  together: Heart,
-  books: BookOpen,
-  events: Music,
-  learn: GraduationCap,
 }
 
-const shortLabels: Record<CategoryId, string> = {
+const shortLabels: Record<ActiveCategoryId, string> = {
   places: 'Yerler',
   games: 'Oyunlar',
   series: 'Diziler',
   movies: 'Filmler',
   food: 'Lezzetler',
-  together: 'Birlikte',
-  books: 'Kitaplar',
-  events: 'Etkinlik',
-  learn: 'Öğrenme',
 }
 
-type Filter = CategoryId | 'all'
+type Filter = ActiveCategoryId | 'all'
 
 export function BucketListTab() {
   const { done, custom, toggle, add, remove } = useSharedBucketList()
   const [filter, setFilter] = useState<Filter>('all')
-  const [editingCategory, setEditingCategory] = useState<CategoryId | null>(null)
+  const [editingCategory, setEditingCategory] = useState<ActiveCategoryId | null>(null)
   const [selectedForDeletion, setSelectedForDeletion] = useState<string[]>([])
   const changeFilter = (nextFilter: Filter) => {
     setFilter(nextFilter)

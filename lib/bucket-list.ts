@@ -1,16 +1,15 @@
-export type CategoryId =
+export type LegacyCategoryId = 'together' | 'books' | 'events' | 'learn'
+
+export type ActiveCategoryId =
   | 'places'
   | 'games'
   | 'series'
   | 'movies'
   | 'food'
-  | 'together'
-  | 'books'
-  | 'events'
-  | 'learn'
+export type CategoryId = ActiveCategoryId | LegacyCategoryId
 
 export type Category = {
-  id: CategoryId
+  id: ActiveCategoryId
   label: string
   items: { id: string; text: string }[]
 }
@@ -24,8 +23,4 @@ export const categories: Category[] = [
   { id: 'series', label: 'İzlenecek Diziler', items: [] },
   { id: 'movies', label: 'İzlenecek Filmler', items: [] },
   { id: 'food', label: 'Denenecek Lezzetler', items: [] },
-  { id: 'together', label: 'Birlikte Yapılacaklar', items: [] },
-  { id: 'books', label: 'Okunacak Kitaplar', items: [] },
-  { id: 'events', label: 'Konser & Etkinlik', items: [] },
-  { id: 'learn', label: 'Öğrenilecekler', items: [] },
 ]

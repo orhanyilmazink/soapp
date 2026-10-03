@@ -2,15 +2,12 @@
 
 import { useState } from 'react'
 import {
-  BookOpen,
   Clapperboard,
-  GraduationCap,
   Gamepad2,
   Gift,
   Heart,
   LockKeyhole,
   MapPin,
-  Music,
   PartyPopper,
   Sparkles,
   Star,
@@ -20,13 +17,13 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { SectionHeader } from '@/components/section-header'
-import { categories as todoCategories, type CategoryId } from '@/lib/bucket-list'
+import { categories as todoCategories, type ActiveCategoryId } from '@/lib/bucket-list'
 import { config } from '@/lib/config'
 import { useSharedAppState, useSharedBucketList } from '@/lib/shared-app-state'
 import { cn } from '@/lib/utils'
 import { useNow } from '@/lib/use-now'
 
-type AchievementCategoryId = 'relationship' | CategoryId
+type AchievementCategoryId = 'relationship' | ActiveCategoryId
 type Achievement = { count: number; title: string; detail: string; icon: LucideIcon }
 type RelationshipMilestoneId = 'isteme' | 'soz' | 'nisan' | 'kina' | 'evlilik'
 
@@ -39,16 +36,12 @@ const relationshipMilestones: { id: RelationshipMilestoneId; title: string }[] =
   { id: 'evlilik', title: 'Evlilik' },
 ]
 
-const categoryIcons: Record<CategoryId, LucideIcon> = {
+const categoryIcons: Record<ActiveCategoryId, LucideIcon> = {
   places: MapPin,
   games: Gamepad2,
   series: Tv,
   movies: Clapperboard,
   food: UtensilsCrossed,
-  together: Heart,
-  books: BookOpen,
-  events: Music,
-  learn: GraduationCap,
 }
 
 const achievements: Record<AchievementCategoryId, Achievement[]> = {
@@ -94,34 +87,6 @@ const achievements: Record<AchievementCategoryId, Achievement[]> = {
     { count: 20, title: 'Menüde ne varsa', detail: 'Yirmi yeni lezzet keşfedildi', icon: Gift },
     { count: 50, title: 'Gurme çift', detail: 'Birlikte elli lezzet anısı', icon: Trophy },
   ],
-  together: [
-    { count: 1, title: 'İlk ortak plan', detail: 'Birlikte yapılacak ilk şey', icon: Heart },
-    { count: 5, title: 'Beş güzel fikir', detail: 'Planlar birikiyor', icon: Sparkles },
-    { count: 10, title: 'Birlikte her şey', detail: 'On ortak plan tamamlandı', icon: Gift },
-    { count: 20, title: 'Planlı mutluluk', detail: 'Yirmi güzel anı yaşandı', icon: Star },
-    { count: 50, title: 'Bitmeyen liste', detail: 'Birlikte yapılacak hep daha çok şey var', icon: PartyPopper },
-  ],
-  books: [
-    { count: 1, title: 'İlk ortak kitap', detail: 'İlk sayfadan son sayfaya', icon: BookOpen },
-    { count: 3, title: 'Üç kitap', detail: 'Üzerine konuşacak çok şey var', icon: Heart },
-    { count: 5, title: 'Kitap kurdu çift', detail: 'Beş kitap birlikte tamamlandı', icon: Sparkles },
-    { count: 10, title: 'On hikâye', detail: 'Birlikte on yeni dünya', icon: Gift },
-    { count: 20, title: 'Küçük kütüphane', detail: 'Yirmi kitabın ortak anısı', icon: Trophy },
-  ],
-  events: [
-    { count: 1, title: 'İlk etkinlik', detail: 'İlk konser veya etkinlik anınız', icon: Music },
-    { count: 3, title: 'Üç canlı an', detail: 'Müzik ve kahkaha bir arada', icon: Heart },
-    { count: 5, title: 'Etkinlik takımı', detail: 'Beş etkinlik birlikte tamamlandı', icon: Sparkles },
-    { count: 10, title: 'Ön sıra enerjisi', detail: 'On etkinlikte yan yana', icon: Star },
-    { count: 20, title: 'Sahne sizin', detail: 'Yirmi unutulmaz etkinlik', icon: PartyPopper },
-  ],
-  learn: [
-    { count: 1, title: 'İlk yeni beceri', detail: 'Birlikte ilk kez bir şey öğrendiniz', icon: GraduationCap },
-    { count: 3, title: 'Üç yeni şey', detail: 'Merakınız size iyi geliyor', icon: Sparkles },
-    { count: 5, title: 'Meraklı ikili', detail: 'Beş yeni beceri birlikte öğrenildi', icon: Heart },
-    { count: 10, title: 'Öğrenmeye devam', detail: 'On yeni konuda birlikte ilerlediniz', icon: Gift },
-    { count: 20, title: 'Her gün daha fazlası', detail: 'Yirmi ortak öğrenme anısı', icon: Trophy },
-  ],
 }
 
 const categories: { id: AchievementCategoryId; label: string; shortLabel: string; icon: LucideIcon }[] = [
@@ -132,10 +97,6 @@ const categories: { id: AchievementCategoryId; label: string; shortLabel: string
     series: 'Diziler',
     movies: 'Filmler',
     food: 'Lezzetler',
-    together: 'Birlikte',
-    books: 'Kitaplar',
-    events: 'Etkinlik',
-    learn: 'Öğrenme',
   }[id], icon: categoryIcons[id] })),
 ]
 
@@ -149,12 +110,12 @@ export function AchievementsTab() {
   const togetherDays = now
     ? Math.max(0, Math.floor((now - new Date(config.togetherSince).getTime()) / 86_400_000))
     : 0
-  const completedCounts = todoCategories.reduce<Record<CategoryId, number>>((counts, category) => {
+  const completedCounts = todoCategories.reduce<Record<ActiveCategoryId, number>>((counts, category) => {
     const completedBuiltIn = category.items.filter((item) => done.has(item.id)).length
     const completedCustom = custom.filter((item) => item.category === category.id && done.has(item.id)).length
     counts[category.id] = completedBuiltIn + completedCustom
     return counts
-  }, {} as Record<CategoryId, number>)
+  }, {} as Record<ActiveCategoryId, number>)
   const currentCounts: Record<AchievementCategoryId, number> = { relationship: togetherDays, ...completedCounts }
   const currentCount = currentCounts[activeCategory]
   const activeAchievements = achievements[activeCategory]
@@ -165,10 +126,6 @@ export function AchievementsTab() {
     series: 'dizi',
     movies: 'film',
     food: 'lezzet',
-    together: 'plan',
-    books: 'kitap',
-    events: 'etkinlik',
-    learn: 'beceri',
   }
   const countUnit = countUnits[activeCategory]
   const unlockedTotal = Object.entries(achievements).reduce(

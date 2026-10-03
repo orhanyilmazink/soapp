@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
-import { categories, type CategoryId } from '@/lib/bucket-list'
+import { categories, type ActiveCategoryId, type CategoryId } from '@/lib/bucket-list'
 
 export type SharedCustomItem = { id: string; category: CategoryId; text: string }
 export type SharedCalendarEvent = {
@@ -57,7 +57,14 @@ function readJson<T>(key: string, fallback: T): T {
 function normalizeAppData(value: unknown, fallback: SharedAppData = emptyState): SharedAppData {
   if (!value || typeof value !== 'object') return fallback
   const input = value as Partial<SharedAppData>
-  const validCategoryIds = new Set(categories.map((category) => category.id))
+  // Retain older entries in saved state even though these categories are no longer shown.
+  const validCategoryIds = new Set<CategoryId>([
+    ...categories.map((category) => category.id),
+    'together',
+    'books',
+    'events',
+    'learn',
+  ])
 
   return {
     version: 1,
@@ -499,7 +506,7 @@ export function useSharedBucketList() {
       const next = done.has(id) ? state.done.filter((item) => item !== id) : [...state.done, id]
       updateSharedState({ done: next })
     },
-    add: (category: CategoryId, text: string) => {
+    add: (category: ActiveCategoryId, text: string) => {
       const trimmed = text.trim().slice(0, 80)
       if (!trimmed) return
       updateSharedState({
