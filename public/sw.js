@@ -48,7 +48,7 @@ self.addEventListener('fetch', (event) => {
 
   // İkon ve manifest gibi dosyalarda her zaman güncel dosyayı al
   if (
-    request.url.endsWith('/icon-512.png') ||
+    request.url.endsWith('/icon-512-v2.png') ||
     request.url.endsWith('/apple-icon.png') ||
     request.url.includes('/manifest')
   ) {
