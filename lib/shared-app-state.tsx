@@ -14,6 +14,9 @@ export type SharedCalendarEvent = {
 }
 export type SharedAppData = {
   version: 1
+  firstName: string
+  secondName: string
+  togetherSince: string
   done: string[]
   custom: SharedCustomItem[]
   calendarEvents: SharedCalendarEvent[]
@@ -34,6 +37,9 @@ const syncedStateKey = 'shared-app-state-synced-v1'
 const sharedRowId = 'shared'
 const emptyState: SharedAppData = {
   version: 1,
+  firstName: 'Şevval',
+  secondName: 'Orhan',
+  togetherSince: '2025-09-23',
   done: [],
   custom: [],
   calendarEvents: [],
@@ -68,6 +74,9 @@ function normalizeAppData(value: unknown, fallback: SharedAppData = emptyState):
 
   return {
     version: 1,
+    firstName: typeof input.firstName === 'string' ? input.firstName : fallback.firstName,
+    secondName: typeof input.secondName === 'string' ? input.secondName : fallback.secondName,
+    togetherSince: typeof input.togetherSince === 'string' ? input.togetherSince : fallback.togetherSince,
     done: Array.isArray(input.done)
       ? input.done.filter((item): item is string => typeof item === 'string')
       : fallback.done,
@@ -147,6 +156,9 @@ function mergeLegacyRemote(remoteValue: unknown, local: SharedAppData, mergeLoca
 
   return {
     version: 1,
+    firstName: remote.firstName || local.firstName,
+    secondName: remote.secondName || local.secondName,
+    togetherSince: remote.togetherSince || local.togetherSince,
     done: [...new Set([...local.done, ...remote.done])],
     custom: [...custom.values()],
     calendarEvents: [...calendarEvents.values()],
@@ -198,6 +210,9 @@ function mergeConcurrentChanges(
 ): SharedAppData {
   return {
     version: 1,
+    firstName: desired.firstName === base.firstName ? remote.firstName : desired.firstName,
+    secondName: desired.secondName === base.secondName ? remote.secondName : desired.secondName,
+    togetherSince: desired.togetherSince === base.togetherSince ? remote.togetherSince : desired.togetherSince,
     done: mergeSetChanges(base.done, desired.done, remote.done),
     custom: mergeRecordChanges(base.custom, desired.custom, remote.custom),
     calendarEvents: mergeRecordChanges(base.calendarEvents, desired.calendarEvents, remote.calendarEvents),

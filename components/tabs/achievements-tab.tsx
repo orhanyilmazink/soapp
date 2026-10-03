@@ -22,7 +22,6 @@ import {
 } from 'lucide-react'
 import { SectionHeader } from '@/components/section-header'
 import { categories as todoCategories, type ActiveCategoryId } from '@/lib/bucket-list'
-import { config } from '@/lib/config'
 import { useSharedAppState, useSharedBucketList } from '@/lib/shared-app-state'
 import { cn } from '@/lib/utils'
 import { useNow } from '@/lib/use-now'
@@ -130,7 +129,7 @@ export function AchievementsTab() {
   const completedRelationshipMilestones = state.relationshipMilestones as RelationshipMilestoneId[]
 
   const togetherDays = now
-    ? Math.max(0, Math.floor((now - new Date(config.togetherSince).getTime()) / 86_400_000))
+    ? Math.max(0, Math.floor((now - new Date(`${state.togetherSince}T00:00:00`).getTime()) / 86_400_000))
     : 0
   const completedCounts = todoCategories.reduce<Record<ActiveCategoryId, number>>((counts, category) => {
     const completedBuiltIn = category.items.filter((item) => done.has(item.id)).length

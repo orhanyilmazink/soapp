@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { CalendarDays, Clock3, Heart, Moon, Settings2, Sun } from 'lucide-react'
-import { config } from '@/lib/config'
 import { useSharedAppState } from '@/lib/shared-app-state'
 import { splitDuration, useNow } from '@/lib/use-now'
 
@@ -22,9 +21,9 @@ export function HomeTab({
 }) {
   const now = useNow()
   const { state, updateSharedState } = useSharedAppState()
-  const { meetupDate, meetupTime } = state
+  const { firstName, secondName, togetherSince, meetupDate, meetupTime } = state
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const since = new Date(config.togetherSince).getTime()
+  const since = new Date(`${togetherSince}T00:00:00`).getTime()
   const together = now ? splitDuration(now - since) : null
 
   useEffect(() => {
@@ -52,41 +51,91 @@ export function HomeTab({
           <Settings2 className="size-5" aria-hidden="true" />
         </button>
         <div className="flex items-center justify-center gap-2 sm:gap-3">
-          <span className="font-script text-4xl leading-none text-zinc-900 sm:text-5xl">Şevval</span>
+          <span className="font-script text-4xl leading-none text-zinc-900 sm:text-5xl">
+            {firstName || 'Şevval'}
+          </span>
           <Heart
             className="size-5 text-pink-300 drop-shadow-sm sm:size-6"
             fill="currentColor"
             strokeWidth={0}
             aria-hidden="true"
           />
-          <span className="font-script text-4xl leading-none text-zinc-900 sm:text-5xl">Orhan</span>
+          <span className="font-script text-4xl leading-none text-zinc-900 sm:text-5xl">
+            {secondName || 'Orhan'}
+          </span>
         </div>
         {settingsOpen && (
           <div
             id="home-settings"
             role="group"
-            aria-label="Görünüm teması"
-            className="mt-4 animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-300"
+            aria-label="Uygulama ayarları"
+            className="mt-4 flex flex-col gap-3 text-left animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-300"
           >
-            <p className="mb-2 text-xs font-bold text-zinc-500">Tema</p>
-            <div className="grid grid-cols-2 gap-2">
-              {themeOptions.map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  aria-pressed={theme === id}
-                  onClick={() => onThemeChange(id)}
-                  className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-bold transition-colors ${
-                    theme === id
-                      ? 'border-pink-300 bg-pink-50 text-pink-600'
-                      : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
-                  }`}
-                >
-                  <Icon className="size-4" aria-hidden="true" />
-                  {label}
-                </button>
-              ))}
-            </div>
+            <section className="rounded-2xl border border-zinc-200 bg-white/80 p-3">
+              <label htmlFor="together-since" className="mb-2 block text-xs font-bold text-zinc-500">
+                Birlikte başlangıç tarihi
+              </label>
+              <input
+                id="together-since"
+                type="date"
+                value={togetherSince}
+                required
+                onChange={(event) => {
+                  if (event.target.value) updateSharedState({ togetherSince: event.target.value })
+                }}
+                className="min-h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-800 outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-100"
+              />
+            </section>
+
+            <section className="rounded-2xl border border-zinc-200 bg-white/80 p-3">
+              <p className="mb-2 text-xs font-bold text-zinc-500">İsimler</p>
+              <div className="flex flex-col gap-2">
+                <label className="sr-only" htmlFor="first-person-name">İlk kişinin adı</label>
+                <input
+                  id="first-person-name"
+                  aria-label="İlk kişinin adı"
+                  type="text"
+                  maxLength={24}
+                  value={firstName}
+                  onChange={(event) => updateSharedState({ firstName: event.target.value })}
+                  placeholder="Şevval"
+                  className="min-h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-800 outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-100"
+                />
+                <label className="sr-only" htmlFor="second-person-name">İkinci kişinin adı</label>
+                <input
+                  id="second-person-name"
+                  aria-label="İkinci kişinin adı"
+                  type="text"
+                  maxLength={24}
+                  value={secondName}
+                  onChange={(event) => updateSharedState({ secondName: event.target.value })}
+                  placeholder="Orhan"
+                  className="min-h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-800 outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-100"
+                />
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-zinc-200 bg-white/80 p-3">
+              <p className="mb-2 text-xs font-bold text-zinc-500">Tema</p>
+              <div className="flex flex-col gap-2">
+                {themeOptions.map(({ id, label, Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={theme === id}
+                    onClick={() => onThemeChange(id)}
+                    className={`flex min-h-11 items-center justify-start gap-2 rounded-xl border px-3 text-sm font-bold transition-colors ${
+                      theme === id
+                        ? 'border-pink-300 bg-pink-50 text-pink-600'
+                        : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
+                    }`}
+                  >
+                    <Icon className="size-4" aria-hidden="true" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </section>
           </div>
         )}
       </header>

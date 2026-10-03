@@ -31,10 +31,6 @@ type CalendarEvent = {
   kind: EventKind
 }
 const customEventsKey = 'relationship-calendar-events'
-const birthdays = [
-  { id: 'birthday-sevval', name: 'Şevval', date: config.birthDate },
-  { id: 'birthday-orhan', name: 'Orhan', date: config.senderBirthDate },
-]
 const pad = (value: number) => value.toString().padStart(2, '0')
 const dateKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 const parseDateKey = (value: string) => {
@@ -42,9 +38,14 @@ const parseDateKey = (value: string) => {
   return new Date(year, month - 1, day, 12)
 }
 
-function eventsForYear(year: number, customEvents: CustomEvent[]): CalendarEvent[] {
+function eventsForYear(
+  year: number,
+  customEvents: CustomEvent[],
+  togetherSince: string,
+  birthdays: { id: string; name: string; date: string }[]
+): CalendarEvent[] {
   const events: CalendarEvent[] = []
-  const relationshipStart = new Date(config.togetherSince)
+  const relationshipStart = new Date(`${togetherSince}T00:00:00`)
   const anniversaryNumber = year - relationshipStart.getFullYear()
 
   if (anniversaryNumber > 0) {
@@ -102,6 +103,10 @@ export function CalendarTab() {
   const [visibleMonth, setVisibleMonth] = useState<Date | null>(null)
   const [selectedDate, setSelectedDate] = useState('')
   const customEvents = state.calendarEvents
+  const birthdaysForCouple = [
+    { id: 'birthday-sevval', name: state.firstName || 'Şevval', date: config.birthDate },
+    { id: 'birthday-orhan', name: state.secondName || 'Orhan', date: config.senderBirthDate },
+  ]
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [newDate, setNewDate] = useState('')
@@ -117,7 +122,7 @@ export function CalendarTab() {
 
   const todayKey = now ? dateKey(new Date(now)) : ''
   const togetherDays = now
-    ? Math.max(0, Math.floor((now - new Date(config.togetherSince).getTime()) / 86_400_000))
+    ? Math.max(0, Math.floor((now - new Date(`${state.togetherSince}T00:00:00`).getTime()) / 86_400_000))
     : 0
 
   const calendarDays = visibleMonth
@@ -136,16 +141,16 @@ export function CalendarTab() {
 
   const visibleEvents = visibleMonth
     ? [
-        ...eventsForYear(visibleMonth.getFullYear() - 1, customEvents),
-        ...eventsForYear(visibleMonth.getFullYear(), customEvents),
-        ...eventsForYear(visibleMonth.getFullYear() + 1, customEvents),
+        ...eventsForYear(visibleMonth.getFullYear() - 1, customEvents, state.togetherSince, birthdaysForCouple),
+        ...eventsForYear(visibleMonth.getFullYear(), customEvents, state.togetherSince, birthdaysForCouple),
+        ...eventsForYear(visibleMonth.getFullYear() + 1, customEvents, state.togetherSince, birthdaysForCouple),
       ]
     : []
   const selectedEvents = visibleEvents.filter((event) => event.date === selectedDate)
   const upcomingEvents = now
     ? [
-        ...eventsForYear(new Date(now).getFullYear(), customEvents),
-        ...eventsForYear(new Date(now).getFullYear() + 1, customEvents),
+        ...eventsForYear(new Date(now).getFullYear(), customEvents, state.togetherSince, birthdaysForCouple),
+        ...eventsForYear(new Date(now).getFullYear() + 1, customEvents, state.togetherSince, birthdaysForCouple),
       ]
         .filter((event) => event.date >= todayKey)
         .sort((left, right) => left.date.localeCompare(right.date))
