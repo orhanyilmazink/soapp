@@ -1,4 +1,4 @@
-const CACHE = 'iyi-ki-dogdun-v2'
+const CACHE = 'iyi-ki-dogdun-v3'
 const PRECACHE = ['/']
 
 self.addEventListener('install', (event) => {
@@ -48,6 +48,7 @@ self.addEventListener('fetch', (event) => {
 
   // İkon ve manifest gibi dosyalarda her zaman güncel dosyayı al
   if (
+    request.url.endsWith('/icon-512-v3.png') ||
     request.url.endsWith('/icon-512-v2.png') ||
     request.url.endsWith('/apple-icon.png') ||
     request.url.includes('/manifest')
