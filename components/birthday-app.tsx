@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Fingerprint, Heart, LockKeyhole } from 'lucide-react'
 import { BottomNav, type TabId } from '@/components/bottom-nav'
 import { FloatingHearts } from '@/components/floating-hearts'
@@ -11,7 +11,6 @@ import { BucketListTab } from '@/components/tabs/bucket-list-tab'
 import { LetterTab } from '@/components/tabs/letter-tab'
 import { SharedAppStateProvider } from '@/lib/shared-app-state'
 
-const tabs: TabId[] = ['home', 'todo', 'calendar', 'achievements', 'letter']
 const appPin = '0111'
 const rememberedUnlockKey = 'birthday-app-unlocked'
 const biometricCredentialKey = 'birthday-app-biometric-credential'
@@ -45,8 +44,6 @@ export function BirthdayApp() {
   const [canUseBiometric, setCanUseBiometric] = useState(false)
   const [isBiometricBusy, setIsBiometricBusy] = useState(false)
   const [biometricError, setBiometricError] = useState('')
-  const touchStartX = useRef<number | null>(null)
-  const touchStartY = useRef<number | null>(null)
 
   useEffect(() => {
     let active = true
@@ -184,32 +181,6 @@ export function BirthdayApp() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const handleTouchStart = (event: React.TouchEvent<HTMLElement>) => {
-    const touch = event.touches[0]
-    touchStartX.current = touch.clientX
-    touchStartY.current = touch.clientY
-  }
-
-  const handleTouchEnd = (event: React.TouchEvent<HTMLElement>) => {
-    if (touchStartX.current === null || touchStartY.current === null) return
-
-    const touch = event.changedTouches[0]
-    const diffX = touch.clientX - touchStartX.current
-    const diffY = touch.clientY - touchStartY.current
-
-    if (Math.abs(diffX) > 60 && Math.abs(diffX) > Math.abs(diffY)) {
-      const currentIndex = tabs.indexOf(tab)
-      const nextIndex = diffX < 0 ? currentIndex + 1 : currentIndex - 1
-
-      if (nextIndex >= 0 && nextIndex < tabs.length) {
-        changeTab(tabs[nextIndex])
-      }
-    }
-
-    touchStartX.current = null
-    touchStartY.current = null
-  }
-
   if (!isReady || !isUnlocked) {
     return (
       <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-[radial-gradient(ellipse_at_top,rgba(244,114,182,0.1),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.9),rgba(245,245,247,1))] px-5">
@@ -322,9 +293,6 @@ export function BirthdayApp() {
           id={`panel-${tab}`}
           role="tabpanel"
           aria-labelledby={`tab-${tab}`}
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-          style={{ touchAction: 'pan-y' }}
           className="relative mx-auto w-full max-w-md px-5 pt-[max(env(safe-area-inset-top),1.5rem)] pb-32"
         >
           <div key={tab} className="animate-[fadeIn_0.35s_ease,slideIn_0.4s_cubic-bezier(0.22,1,0.36,1)]">
