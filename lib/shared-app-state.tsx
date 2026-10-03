@@ -151,6 +151,63 @@ function mergeLegacyRemote(remoteValue: unknown, local: SharedAppData, mergeLoca
   }
 }
 
+function mergeSetChanges(base: string[], desired: string[], remote: string[]) {
+  const baseSet = new Set(base)
+  const desiredSet = new Set(desired)
+  const merged = new Set(remote)
+
+  for (const value of baseSet) {
+    if (!desiredSet.has(value)) merged.delete(value)
+  }
+  for (const value of desiredSet) {
+    if (!baseSet.has(value)) merged.add(value)
+  }
+
+  return [...merged]
+}
+
+function mergeRecordChanges<T extends { id: string }>(base: T[], desired: T[], remote: T[]) {
+  const baseById = new Map(base.map((item) => [item.id, item]))
+  const desiredById = new Map(desired.map((item) => [item.id, item]))
+  const merged = new Map(remote.map((item) => [item.id, item]))
+
+  for (const [id, baseItem] of baseById) {
+    if (!desiredById.has(id)) merged.delete(id)
+    else if (JSON.stringify(desiredById.get(id)) !== JSON.stringify(baseItem)) {
+      merged.set(id, desiredById.get(id) as T)
+    }
+  }
+  for (const [id, item] of desiredById) {
+    if (!baseById.has(id)) merged.set(id, item)
+  }
+
+  return [...merged.values()]
+}
+
+function mergeConcurrentChanges(
+  base: SharedAppData,
+  desired: SharedAppData,
+  remote: SharedAppData
+): SharedAppData {
+  return {
+    version: 1,
+    done: mergeSetChanges(base.done, desired.done, remote.done),
+    custom: mergeRecordChanges(base.custom, desired.custom, remote.custom),
+    calendarEvents: mergeRecordChanges(base.calendarEvents, desired.calendarEvents, remote.calendarEvents),
+    meetupDate: desired.meetupDate === base.meetupDate ? remote.meetupDate : desired.meetupDate,
+    meetupTime: desired.meetupTime === base.meetupTime ? remote.meetupTime : desired.meetupTime,
+    relationshipMilestones: mergeSetChanges(
+      base.relationshipMilestones,
+      desired.relationshipMilestones,
+      remote.relationshipMilestones
+    ),
+  }
+}
+
+function sameAppData(left: SharedAppData, right: SharedAppData) {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
 function writeLocalAppData(data: SharedAppData) {
   try {
     localStorage.setItem(localStateKey, JSON.stringify(data))
@@ -166,8 +223,11 @@ export function SharedAppStateProvider({ children }: { children: ReactNode }) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(supabase ? 'connecting' : 'local')
   const [syncError, setSyncError] = useState('')
   const stateRef = useRef<SharedAppData>(emptyState)
+  const lastSyncedState = useRef<SharedAppData>(emptyState)
+  const lastSyncedAt = useRef('')
   const mergeLocalOnFirstSync = useRef(true)
   const writeQueue = useRef<Promise<void>>(Promise.resolve())
+  const pendingSaveRef = useRef<(() => Promise<void>) | null>(null)
 
   useEffect(() => {
     const local = loadLocalAppData()
@@ -183,34 +243,177 @@ export function SharedAppStateProvider({ children }: { children: ReactNode }) {
     const client = supabase
     let active = true
     let channel: ReturnType<typeof client.channel> | null = null
+    let initialSyncDone = false
+    let pendingRemote: { state: SharedAppData; updatedAt: string } | null = null
     setSyncStatus('connecting')
     setCloudReady(false)
     setSyncError('')
+
+    const persistLatestState = async () => {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const { data, error } = await client
+          .from('bucket_lists')
+          .select('state, updated_at')
+          .eq('id', sharedRowId)
+          .maybeSingle()
+        if (error) throw error
+
+        if (!data) {
+          const desired = stateRef.current
+          const insertedAt = new Date().toISOString()
+          const { error: insertError } = await client.from('bucket_lists').insert({
+            id: sharedRowId,
+            state: desired,
+            updated_at: insertedAt,
+          })
+          if (insertError?.code === '23505') continue
+          if (insertError) throw insertError
+          lastSyncedState.current = desired
+          lastSyncedAt.current = insertedAt
+          return
+        }
+
+        const remote = normalizeAppData(data.state)
+        const desired = stateRef.current
+        const merged = mergeConcurrentChanges(lastSyncedState.current, desired, remote)
+        if (sameAppData(remote, merged)) {
+          lastSyncedState.current = remote
+          lastSyncedAt.current = data.updated_at
+          const adopted = mergeConcurrentChanges(desired, stateRef.current, remote)
+          stateRef.current = adopted
+          setState(adopted)
+          writeLocalAppData(adopted)
+          return
+        }
+
+        const updatedAt = new Date(Math.max(Date.now(), Date.parse(data.updated_at) + 1)).toISOString()
+        const { data: saved, error: saveError } = await client
+          .from('bucket_lists')
+          .update({ state: merged, updated_at: updatedAt })
+          .eq('id', sharedRowId)
+          .eq('updated_at', data.updated_at)
+          .select('updated_at')
+          .maybeSingle()
+        if (saveError) throw saveError
+        if (!saved) continue
+
+        lastSyncedState.current = merged
+        lastSyncedAt.current = saved.updated_at
+        const adopted = mergeConcurrentChanges(desired, stateRef.current, merged)
+        stateRef.current = adopted
+        setState(adopted)
+        writeLocalAppData(adopted)
+        return
+      }
+
+      throw new Error('Eşitleme sırasında başka bir cihazdan gelen değişiklikler çakıştı. Yeniden deneyin.')
+    }
+
+    const queueSave = () => {
+      const save = writeQueue.current.then(persistLatestState)
+      writeQueue.current = save.catch((error: unknown) => {
+        if (active) {
+          setSyncStatus('offline')
+          setSyncError(error instanceof Error ? error.message : 'Değişiklik eşitlenemedi.')
+        }
+      })
+
+      return save.then(() => {
+        if (!active) return
+        setSyncStatus('connected')
+        setSyncError('')
+      })
+    }
+    pendingSaveRef.current = queueSave
+
+    const applyRemoteState = (incoming: SharedAppData, updatedAt: string) => {
+      if (lastSyncedAt.current && Date.parse(updatedAt) <= Date.parse(lastSyncedAt.current)) return
+
+      const next = mergeConcurrentChanges(lastSyncedState.current, stateRef.current, incoming)
+      lastSyncedState.current = incoming
+      lastSyncedAt.current = updatedAt
+      stateRef.current = next
+      setState(next)
+      writeLocalAppData(next)
+      if (!sameAppData(next, incoming)) void queueSave().catch(() => undefined)
+    }
+
+    const refreshFromCloud = async () => {
+      const { data, error } = await client
+        .from('bucket_lists')
+        .select('state, updated_at')
+        .eq('id', sharedRowId)
+        .maybeSingle()
+      if (error) throw error
+      if (data?.state && active) {
+        applyRemoteState(normalizeAppData(data.state), data.updated_at)
+      }
+    }
+
+    channel = client
+      .channel('shared-app-state')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'bucket_lists', filter: `id=eq.${sharedRowId}` },
+        (payload) => {
+          if (!active) return
+          const newRow = payload.new as { state?: unknown; updated_at?: string } | undefined
+          if (!newRow?.state || !newRow.updated_at) return
+          const incoming = normalizeAppData(newRow.state)
+          if (!initialSyncDone) {
+            if (!pendingRemote || Date.parse(newRow.updated_at) > Date.parse(pendingRemote.updatedAt)) {
+              pendingRemote = { state: incoming, updatedAt: newRow.updated_at }
+            }
+            return
+          }
+          applyRemoteState(incoming, newRow.updated_at)
+        }
+      )
+      .subscribe((status) => {
+        if (!active) return
+        if (status === 'SUBSCRIBED') {
+          setSyncStatus('connected')
+          if (initialSyncDone) {
+            void refreshFromCloud().catch((error: unknown) => {
+              if (!active) return
+              setSyncStatus('offline')
+              setSyncError(error instanceof Error ? error.message : 'Uzak kayıt yenilenemedi.')
+            })
+          }
+        }
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setSyncStatus('offline')
+          setSyncError('Canlı eşitleme bağlantısı kurulamadı.')
+        }
+      })
 
     const connect = async () => {
       try {
         const { data, error } = await client
           .from('bucket_lists')
-          .select('state')
+          .select('state, updated_at')
           .eq('id', sharedRowId)
           .maybeSingle()
         if (error) throw error
 
-        const next = data?.state
-          ? mergeLegacyRemote(data.state, stateRef.current, mergeLocalOnFirstSync.current)
+        let remote = data?.state ? normalizeAppData(data.state) : emptyState
+        let remoteUpdatedAt = data?.updated_at ?? ''
+        if (pendingRemote && (!remoteUpdatedAt || Date.parse(pendingRemote.updatedAt) > Date.parse(remoteUpdatedAt))) {
+          remote = pendingRemote.state
+          remoteUpdatedAt = pendingRemote.updatedAt
+        }
+
+        lastSyncedState.current = remote
+        lastSyncedAt.current = remoteUpdatedAt
+        const next = data?.state || pendingRemote
+          ? mergeLegacyRemote(remote, stateRef.current, mergeLocalOnFirstSync.current)
           : stateRef.current
         stateRef.current = next
         setState(next)
         writeLocalAppData(next)
 
-        if (!data?.state || JSON.stringify(data.state) !== JSON.stringify(next)) {
-          const { error: writeError } = await client
-            .from('bucket_lists')
-            .upsert(
-              { id: sharedRowId, state: next, updated_at: new Date().toISOString() },
-              { onConflict: 'id' }
-            )
-          if (writeError) throw writeError
+        if (!(data?.state || pendingRemote) || !sameAppData(remote, next)) {
+          await queueSave()
         }
 
         mergeLocalOnFirstSync.current = false
@@ -221,31 +424,16 @@ export function SharedAppStateProvider({ children }: { children: ReactNode }) {
         }
 
         if (!active) return
-        channel = client
-          .channel('shared-app-state')
-          .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'bucket_lists', filter: `id=eq.${sharedRowId}` },
-            (payload) => {
-              const newRow = payload.new as { state?: unknown } | undefined
-              if (!active || !newRow?.state) return
-              const incoming = normalizeAppData(newRow.state, stateRef.current)
-              stateRef.current = incoming
-              setState(incoming)
-              writeLocalAppData(incoming)
-            }
-          )
-          .subscribe((status) => {
-            if (!active) return
-            if (status === 'SUBSCRIBED') setSyncStatus('connected')
-            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-              setSyncStatus('offline')
-              setSyncError('Canlı eşitleme bağlantısı kurulamadı.')
-            }
-          })
+        initialSyncDone = true
         setCloudReady(true)
+        void refreshFromCloud().catch((refreshError: unknown) => {
+          if (!active) return
+          setSyncStatus('offline')
+          setSyncError(refreshError instanceof Error ? refreshError.message : 'Uzak kayıt yenilenemedi.')
+        })
       } catch (error) {
         if (!active) return
+        initialSyncDone = true
         setSyncStatus('offline')
         setSyncError(error instanceof Error ? error.message : 'Eşitleme bağlantısı kurulamadı.')
         setCloudReady(true)
@@ -255,6 +443,7 @@ export function SharedAppStateProvider({ children }: { children: ReactNode }) {
     void connect()
     return () => {
       active = false
+      pendingSaveRef.current = null
       if (channel) void client.removeChannel(channel)
     }
   }, [localReady])
@@ -265,26 +454,11 @@ export function SharedAppStateProvider({ children }: { children: ReactNode }) {
     setState(next)
     writeLocalAppData(next)
 
-    const client = supabase
-    if (!client) return
-
+    if (!supabase) return
     setSyncStatus('saving')
-    writeQueue.current = writeQueue.current
-      .then(async () => {
-        const { error } = await client
-          .from('bucket_lists')
-          .upsert(
-            { id: sharedRowId, state: next, updated_at: new Date().toISOString() },
-            { onConflict: 'id' }
-          )
-        if (error) throw error
-        setSyncStatus('connected')
-        setSyncError('')
-      })
-      .catch((error: unknown) => {
-        setSyncStatus('offline')
-        setSyncError(error instanceof Error ? error.message : 'Değişiklik eşitlenemedi.')
-      })
+    // The provider effect owns the cloud queue so all edits use the same
+    // compare-and-swap/retry path. The local copy remains available offline.
+    if (pendingSaveRef.current) void pendingSaveRef.current().catch(() => undefined)
   }
 
   if (!localReady || (supabase && !cloudReady)) {
