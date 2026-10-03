@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, type FormEvent } from 'react'
-import { Fingerprint, Heart, LockKeyhole } from 'lucide-react'
+import { Heart, LockKeyhole, ScanFace } from 'lucide-react'
 import { BottomNav, type TabId } from '@/components/bottom-nav'
 import { FloatingHearts } from '@/components/floating-hearts'
 import { HomeTab } from '@/components/tabs/home-tab'
@@ -39,7 +39,6 @@ export function BirthdayApp() {
   const [pinError, setPinError] = useState(false)
   const [isReady, setIsReady] = useState(false)
   const [isUnlocked, setIsUnlocked] = useState(false)
-  const [isPinVerified, setIsPinVerified] = useState(false)
   const [hasBiometric, setHasBiometric] = useState(false)
   const [canUseBiometric, setCanUseBiometric] = useState(false)
   const [isBiometricBusy, setIsBiometricBusy] = useState(false)
@@ -53,20 +52,26 @@ export function BirthdayApp() {
     setIsUnlocked(
       localStorage.getItem(rememberedUnlockKey) === 'true' && !storedCredential && promptDismissed
     )
-    setIsReady(true)
 
-    if (
+    const canCheckBiometrics =
       window.isSecureContext &&
       typeof PublicKeyCredential !== 'undefined' &&
       typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function'
-    ) {
+
+    if (canCheckBiometrics) {
       PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
         .then((available) => {
-          if (active) setCanUseBiometric(available)
+          if (!active) return
+          setCanUseBiometric(available)
+          setIsReady(true)
         })
         .catch(() => {
-          if (active) setCanUseBiometric(false)
+          if (!active) return
+          setCanUseBiometric(false)
+          setIsReady(true)
         })
+    } else {
+      setIsReady(true)
     }
 
     return () => {
@@ -74,7 +79,7 @@ export function BirthdayApp() {
     }
   }, [])
 
-  const unlockApp = (event: FormEvent<HTMLFormElement>) => {
+  const unlockApp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (pin !== appPin) {
       setPin('')
@@ -87,8 +92,12 @@ export function BirthdayApp() {
     if (localStorage.getItem(biometricCredentialKey)) {
       localStorage.setItem(rememberedUnlockKey, 'true')
       setIsUnlocked(true)
+    } else if (canUseBiometric) {
+      // Start enrollment from the PIN submit gesture so there is no extra
+      // in-app confirmation screen before the device's Face ID prompt.
+      await enableBiometric()
     } else {
-      setIsPinVerified(true)
+      rememberPinAndUnlock()
     }
   }
 
@@ -98,7 +107,7 @@ export function BirthdayApp() {
     setIsUnlocked(true)
   }
 
-  const enableBiometric = async () => {
+  async function enableBiometric() {
     if (!canUseBiometric) return
     setIsBiometricBusy(true)
     setBiometricError('')
@@ -192,94 +201,76 @@ export function BirthdayApp() {
 
         <section aria-labelledby="pin-title" className="relative w-full max-w-sm rounded-3xl border border-white/80 bg-white/85 p-7 text-center shadow-[0_24px_70px_-34px_rgba(24,24,27,0.3)] backdrop-blur-xl sm:p-9">
           <div className="mx-auto grid size-14 place-items-center rounded-full border border-pink-100 bg-pink-50 text-pink-400">
-            {isPinVerified ? <Fingerprint className="size-6" aria-hidden="true" /> : <LockKeyhole className="size-6" aria-hidden="true" />}
+            <LockKeyhole className="size-6" aria-hidden="true" />
           </div>
           <p className="mt-5 text-[10px] font-black uppercase tracking-[0.32em] text-zinc-400">Şevval ♥ Orhan</p>
           <h1 id="pin-title" className="mt-2 text-2xl font-bold text-zinc-900">
-            {!isReady ? 'Açılıyor' : isPinVerified ? 'Face ID ekleyelim mi?' : 'Hoş geldin'}
+            {!isReady ? 'Açılıyor' : 'Hoş geldin'}
           </h1>
           <p className="mt-2 text-sm text-zinc-500">
             {!isReady
               ? 'Bir saniye...'
-              : isPinVerified
-                ? canUseBiometric
-                  ? 'Bundan sonra Face ID ile hızlıca giriş yapabilirsin.'
-                  : 'Bu cihaz biyometrik giriş desteklemiyor. PIN bu cihazda hatırlanacak.'
-                : hasBiometric
-                  ? 'Face ID ile ya da PIN kodunla devam et.'
+              : hasBiometric
+                ? 'Face ID ile ya da PIN kodunla devam et.'
+                : canUseBiometric
+                  ? 'PIN kodunu gir. Face ID kurulumu hemen başlayacak.'
                   : 'Devam etmek için PIN kodunu gir.'}
           </p>
 
-          {isPinVerified ? (
-            <div className="mt-6 space-y-3">
-              {canUseBiometric && (
-                <button
-                  type="button"
-                  onClick={enableBiometric}
-                  disabled={isBiometricBusy}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-zinc-900 text-sm font-bold text-white transition hover:bg-zinc-700 disabled:opacity-50"
-                >
-                  <Fingerprint className="size-4" aria-hidden="true" />
-                  {isBiometricBusy ? 'Ayarlanıyor…' : 'Face ID’yi etkinleştir'}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={rememberPinAndUnlock}
-                className="h-12 w-full rounded-2xl border border-zinc-200 bg-white text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50"
-              >
-                {canUseBiometric ? 'Şimdi değil, PIN ile devam et' : 'PIN ile devam et'}
-              </button>
-            </div>
-          ) : (
-            <>
-              {hasBiometric && (
-                <button
-                  type="button"
-                  onClick={unlockWithBiometric}
-                  disabled={isBiometricBusy}
-                  className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-pink-200 bg-pink-50 text-sm font-bold text-zinc-800 transition hover:bg-pink-100 disabled:opacity-50"
-                >
-                  <Fingerprint className="size-4 text-pink-500" aria-hidden="true" />
-                  {isBiometricBusy ? 'Doğrulanıyor…' : 'Face ID ile aç'}
-                </button>
-              )}
-              <form onSubmit={unlockApp} className={hasBiometric ? 'mt-3' : 'mt-6'}>
-                <label htmlFor="app-pin" className="sr-only">Dört haneli PIN kodu</label>
-                <input
-                  id="app-pin"
-                  type="password"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  pattern="[0-9]*"
-                  maxLength={4}
-                  autoFocus
-                  value={pin}
-                  onChange={(event) => {
-                    setPin(event.target.value.replace(/\D/g, '').slice(0, 4))
-                    setPinError(false)
-                  }}
-                  aria-invalid={pinError}
-                  aria-describedby={pinError ? 'pin-error' : undefined}
-                  placeholder="••••"
-                  className="h-14 w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 text-center text-2xl font-bold tracking-[0.7em] text-zinc-900 outline-none transition focus:border-pink-300 focus:bg-white focus:ring-4 focus:ring-pink-100"
-                />
-                {pinError && (
-                  <p id="pin-error" role="alert" className="mt-2 text-sm font-medium text-rose-500">
-                    PIN kodu hatalı. Tekrar dene.
-                  </p>
-                )}
-                <button
-                  type="submit"
-                  disabled={!isReady || pin.length !== 4}
-                  className="mt-4 h-12 w-full rounded-2xl bg-zinc-900 text-sm font-bold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  PIN ile aç
-                </button>
-              </form>
-            </>
+          {hasBiometric && (
+            <button
+              type="button"
+              onClick={unlockWithBiometric}
+              disabled={isBiometricBusy}
+              className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-pink-200 bg-pink-50 text-sm font-bold text-zinc-800 transition hover:bg-pink-100 disabled:opacity-50"
+            >
+              <ScanFace className="size-5 text-pink-500" aria-hidden="true" />
+              {isBiometricBusy ? 'Doğrulanıyor…' : 'Face ID ile aç'}
+            </button>
           )}
+          <form onSubmit={unlockApp} className={hasBiometric ? 'mt-3' : 'mt-6'}>
+            <label htmlFor="app-pin" className="sr-only">Dört haneli PIN kodu</label>
+            <input
+              id="app-pin"
+              type="password"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]*"
+              maxLength={4}
+              autoFocus
+              value={pin}
+              onChange={(event) => {
+                setPin(event.target.value.replace(/\D/g, '').slice(0, 4))
+                setPinError(false)
+              }}
+              aria-invalid={pinError}
+              aria-describedby={pinError ? 'pin-error' : undefined}
+              placeholder="••••"
+              className="h-14 w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 text-center text-2xl font-bold tracking-[0.7em] text-zinc-900 outline-none transition focus:border-pink-300 focus:bg-white focus:ring-4 focus:ring-pink-100"
+            />
+            {pinError && (
+              <p id="pin-error" role="alert" className="mt-2 text-sm font-medium text-rose-500">
+                PIN kodu hatalı. Tekrar dene.
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={!isReady || pin.length !== 4 || isBiometricBusy}
+              className="mt-4 h-12 w-full rounded-2xl bg-zinc-900 text-sm font-bold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {isBiometricBusy ? 'Face ID açılıyor…' : 'PIN ile aç'}
+            </button>
+          </form>
           {biometricError && <p role="alert" className="mt-3 text-sm font-medium text-rose-500">{biometricError}</p>}
+          {biometricError && (
+            <button
+              type="button"
+              onClick={rememberPinAndUnlock}
+              className="mt-3 h-11 w-full rounded-2xl border border-zinc-200 bg-white text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50"
+            >
+              PIN ile devam et
+            </button>
+          )}
         </section>
       </main>
     )
