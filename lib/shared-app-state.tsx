@@ -506,10 +506,11 @@ export function useSharedBucketList() {
         custom: [...state.custom, { id: `custom-${Date.now()}`, category, text: trimmed }],
       })
     },
-    remove: (id: string) => {
+    remove: (ids: string | string[]) => {
+      const idsToRemove = new Set(Array.isArray(ids) ? ids : [ids])
       updateSharedState({
-        done: state.done.filter((item) => item !== id),
-        custom: state.custom.filter((item) => item.id !== id),
+        done: state.done.filter((item) => !idsToRemove.has(item)),
+        custom: state.custom.filter((item) => !idsToRemove.has(item.id)),
       })
     },
   }

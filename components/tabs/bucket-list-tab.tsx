@@ -11,10 +11,11 @@ import {
   LayoutGrid,
   MapPin,
   Music,
+  Pencil,
   Plus,
+  Trash2,
   Tv,
   UtensilsCrossed,
-  X,
 } from 'lucide-react'
 import { SectionHeader } from '@/components/section-header'
 import { categories, type CategoryId } from '@/lib/bucket-list'
@@ -50,6 +51,13 @@ type Filter = CategoryId | 'all'
 export function BucketListTab() {
   const { done, custom, toggle, add, remove } = useSharedBucketList()
   const [filter, setFilter] = useState<Filter>('all')
+  const [editingCategory, setEditingCategory] = useState<CategoryId | null>(null)
+  const [selectedForDeletion, setSelectedForDeletion] = useState<string[]>([])
+  const changeFilter = (nextFilter: Filter) => {
+    setFilter(nextFilter)
+    setEditingCategory(null)
+    setSelectedForDeletion([])
+  }
 
   const groups = categories.map((cat) => {
     const items = [
@@ -106,12 +114,12 @@ export function BucketListTab() {
         aria-label="Kategoriler"
         className="mx-auto mb-5 flex max-w-md items-center gap-1 overflow-x-auto rounded-full border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(244,244,246,0.92))] p-1.5 shadow-[0_18px_40px_-22px_rgba(15,23,42,0.5),inset_0_1px_0_rgba(255,255,255,0.92)] backdrop-blur-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        <FilterChip active={filter === 'all'} onClick={() => setFilter('all')} icon={LayoutGrid} label="Tümü" />
+        <FilterChip active={filter === 'all'} onClick={() => changeFilter('all')} icon={LayoutGrid} label="Tümü" />
         {groups.map((g) => (
           <FilterChip
             key={g.id}
             active={filter === g.id}
-            onClick={() => setFilter(g.id)}
+            onClick={() => changeFilter(g.id)}
             icon={icons[g.id]}
             label={g.label}
             shortLabel={shortLabels[g.id]}
@@ -141,6 +149,7 @@ export function BucketListTab() {
               <ul className="flex flex-col">
                 {group.items.map((item) => {
                   const isDone = done.has(item.id)
+                  const isSelectedForDeletion = selectedForDeletion.includes(item.id)
                   return (
                     <li key={item.id} className="flex items-center gap-1 border-t border-border/60 first:border-t-0">
                       <label className="flex min-h-11 flex-1 cursor-pointer items-center gap-3 py-2">
@@ -168,22 +177,65 @@ export function BucketListTab() {
                           {item.text}
                         </span>
                       </label>
-                      {item.custom && (
-                        <button
-                          type="button"
-                          onClick={() => remove(item.id)}
-                          aria-label={`${item.text} maddesini sil`}
-                          className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-                        >
-                          <X className="size-4" aria-hidden="true" />
-                        </button>
+                      {editingCategory === group.id && item.custom && (
+                        <label className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full">
+                          <input
+                            type="checkbox"
+                            checked={isSelectedForDeletion}
+                            onChange={() => {
+                              setSelectedForDeletion((selected) =>
+                                selected.includes(item.id)
+                                  ? selected.filter((id) => id !== item.id)
+                                  : [...selected, item.id]
+                              )
+                            }}
+                            aria-label={`${item.text} maddesini silmek için seç`}
+                            className="peer sr-only"
+                          />
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              'flex size-6 items-center justify-center rounded-md border-2 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-card',
+                              isSelectedForDeletion
+                                ? 'border-destructive bg-destructive text-destructive-foreground'
+                                : 'border-border hover:border-destructive/70'
+                            )}
+                          >
+                            {isSelectedForDeletion && <Check className="size-3.5" strokeWidth={3.5} />}
+                          </span>
+                        </label>
                       )}
                     </li>
                   )
                 })}
               </ul>
 
-              <AddItemForm label={group.label} onAdd={(text) => add(group.id, text)} />
+              {editingCategory === group.id && (
+                <p className="mt-2 text-xs text-muted-foreground" role="status">
+                  Silmek istediklerini işaretle, sonra çöp kutusuna dokun.
+                </p>
+              )}
+              <AddItemForm
+                label={group.label}
+                onAdd={(text) => add(group.id, text)}
+                canEdit={
+                  group.items.some((item) => item.custom) &&
+                  (editingCategory === null || editingCategory === group.id)
+                }
+                isEditing={editingCategory === group.id}
+                selectedCount={selectedForDeletion.length}
+                onEditAction={() => {
+                  if (editingCategory !== group.id) {
+                    setEditingCategory(group.id)
+                    setSelectedForDeletion([])
+                    return
+                  }
+
+                  if (selectedForDeletion.length > 0) remove(selectedForDeletion)
+                  setSelectedForDeletion([])
+                  setEditingCategory(null)
+                }}
+              />
             </section>
           )
         })}
@@ -243,7 +295,21 @@ function FilterChip({
   )
 }
 
-function AddItemForm({ label, onAdd }: { label: string; onAdd: (text: string) => void }) {
+function AddItemForm({
+  label,
+  onAdd,
+  canEdit,
+  isEditing,
+  selectedCount,
+  onEditAction,
+}: {
+  label: string
+  onAdd: (text: string) => void
+  canEdit: boolean
+  isEditing: boolean
+  selectedCount: number
+  onEditAction: () => void
+}) {
   const [text, setText] = useState('')
 
   return (
@@ -265,16 +331,53 @@ function AddItemForm({ label, onAdd }: { label: string; onAdd: (text: string) =>
           if (e.key === 'Enter' && (e.nativeEvent.isComposing || e.keyCode === 229)) e.preventDefault()
         }}
         maxLength={80}
-        placeholder="Kendi planını ekle..."
-        className="h-10 min-w-0 flex-1 rounded-full border border-border bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+        placeholder={isEditing ? 'Silinecek maddeleri seç...' : 'Kendi planını ekle...'}
+        disabled={isEditing}
+        className="h-10 min-w-0 flex-1 rounded-full border border-border bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none disabled:opacity-60"
       />
       <button
         type="submit"
         aria-label="Ekle"
-        disabled={!text.trim()}
+        disabled={!text.trim() || isEditing}
         className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-40"
       >
         <Plus className="size-4" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        onClick={onEditAction}
+        aria-label={
+          !isEditing
+            ? 'Maddeleri düzenle'
+            : selectedCount > 0
+              ? `Seçilen ${selectedCount} maddeyi sil`
+              : 'Düzenlemeyi bitir'
+        }
+        title={
+          !isEditing
+            ? 'Maddeleri düzenle'
+            : selectedCount > 0
+              ? `Seçilen ${selectedCount} maddeyi sil`
+              : 'Düzenlemeyi bitir'
+        }
+        disabled={!canEdit && !isEditing}
+        className={cn(
+          'flex h-10 shrink-0 items-center justify-center gap-1 rounded-full transition-colors disabled:opacity-40',
+          isEditing && selectedCount > 0
+            ? 'bg-destructive px-3 text-destructive-foreground'
+            : 'size-10 bg-muted text-muted-foreground hover:text-foreground'
+        )}
+      >
+        {isEditing && selectedCount > 0 ? (
+          <>
+            <Trash2 className="size-4" aria-hidden="true" />
+            <span className="text-xs font-bold">{selectedCount}</span>
+          </>
+        ) : isEditing ? (
+          <Check className="size-4" aria-hidden="true" />
+        ) : (
+          <Pencil className="size-4" aria-hidden="true" />
+        )}
       </button>
     </form>
   )
