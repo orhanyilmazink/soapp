@@ -66,10 +66,7 @@ export function BucketListTab() {
 
   return (
     <div>
-      <SectionHeader
-        eyebrow="Birlikte"
-        title="Yapılacaklar"
-      />
+      <SectionHeader title="Yapılacaklar" largeTitle />
 
       <section
         aria-label="Genel ilerleme"

@@ -175,10 +175,7 @@ export function CalendarTab() {
 
   return (
     <div className="pb-2">
-      <SectionHeader
-        eyebrow="Sizin özel günleriniz"
-        title="İlişki Takvimi"
-      />
+      <SectionHeader title="Takvim" largeTitle />
 
       <section aria-label="İlişki takvimi" className="surface-panel p-4 sm:p-5">
         <div className="mb-4 flex items-center justify-between">

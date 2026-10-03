@@ -148,7 +148,38 @@ export function AchievementsTab() {
 
   return (
     <div className="pb-2">
-      <SectionHeader eyebrow="Birlikte biriktirdikleriniz" title="Başarım koleksiyonu" />
+      <SectionHeader title="Başarımlar" largeTitle />
+
+      <section
+        aria-label="Başarım ilerlemesi"
+        className="mb-5 rounded-3xl bg-foreground p-5 text-background shadow-[0_14px_30px_-16px_oklch(0.18_0_0/0.5)]"
+      >
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] opacity-70">Kazanılan</p>
+            <p className="mt-1 text-3xl font-extrabold tabular-nums">
+              {unlockedTotal}
+              <span className="text-lg font-semibold opacity-60">{` / ${totalAchievements}`}</span>
+            </p>
+          </div>
+          <p className="text-4xl font-extrabold tabular-nums text-primary">
+            {`%${totalAchievements ? Math.round((unlockedTotal / totalAchievements) * 100) : 0}`}
+          </p>
+        </div>
+        <div
+          role="progressbar"
+          aria-valuenow={totalAchievements ? Math.round((unlockedTotal / totalAchievements) * 100) : 0}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Kazanılan başarım oranı"
+          className="mt-4 h-2.5 overflow-hidden rounded-full bg-background/15"
+        >
+          <div
+            className="h-full rounded-full bg-primary transition-all duration-500"
+            style={{ width: `${totalAchievements ? (unlockedTotal / totalAchievements) * 100 : 0}%` }}
+          />
+        </div>
+      </section>
 
       <section aria-labelledby="achievements-title" className="mt-2">
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -156,7 +187,6 @@ export function AchievementsTab() {
             <Star className="size-4 text-pink-400" aria-hidden="true" />
             <h2 id="achievements-title" className="text-base font-bold text-zinc-900">Birlikte kazandıklarınız</h2>
           </div>
-          <span className="text-xs font-semibold text-zinc-500">{unlockedTotal}/{totalAchievements}</span>
         </div>
 
         <div

@@ -7,14 +7,12 @@ import { useSharedAppState } from '@/lib/shared-app-state'
 import { splitDuration, useNow } from '@/lib/use-now'
 
 const pad = (n: number) => n.toString().padStart(2, '0')
-type MeetupPicker = 'date' | 'time'
 
 export function HomeTab() {
   const now = useNow()
   const { state, updateSharedState } = useSharedAppState()
   const { meetupDate, meetupTime } = state
-  const [activePicker, setActivePicker] = useState<MeetupPicker | null>(null)
-  const [draftDate, setDraftDate] = useState('')
+  const [isTimePickerOpen, setIsTimePickerOpen] = useState(false)
   const [draftTime, setDraftTime] = useState('')
   const pickerDialogRef = useRef<HTMLDialogElement>(null)
   const since = new Date(config.togetherSince).getTime()
@@ -30,7 +28,7 @@ export function HomeTab() {
 
   useEffect(() => {
     const dialog = pickerDialogRef.current
-    if (!dialog || !activePicker) return
+    if (!dialog || !isTimePickerOpen) return
 
     const previousBodyOverflow = document.body.style.overflow
     const previousDocumentOverflow = document.documentElement.style.overflow
@@ -43,28 +41,24 @@ export function HomeTab() {
       document.body.style.overflow = previousBodyOverflow
       document.documentElement.style.overflow = previousDocumentOverflow
     }
-  }, [activePicker])
+  }, [isTimePickerOpen])
 
   const nextMeetup = meetupDate && meetupTime ? new Date(`${meetupDate}T${meetupTime}:00`) : null
   const meetupLeft = now && nextMeetup ? splitDuration(nextMeetup.getTime() - now) : null
 
-  function saveMeetup(date: string, time: string) {
-    updateSharedState({ meetupDate: date, meetupTime: time })
+  function saveMeetupTime(time: string) {
+    updateSharedState({ meetupTime: time })
   }
 
-  function openPicker(picker: MeetupPicker) {
-    setDraftDate(meetupDate)
+  function openTimePicker() {
     setDraftTime(meetupTime)
-    setActivePicker(picker)
+    setIsTimePickerOpen(true)
   }
 
   return (
     <div className="flex min-h-[calc(100dvh-12rem)] flex-col justify-center">
       <header className="surface-panel mb-5 px-5 py-4 text-center backdrop-blur-sm">
-        <p className="text-[10px] font-black uppercase tracking-[0.42em] text-zinc-500">
-          Sevgilim için
-        </p>
-        <div className="mt-2 flex items-center justify-center gap-2 sm:gap-3">
+        <div className="flex items-center justify-center gap-2 sm:gap-3">
           <span className="font-script text-4xl leading-none text-zinc-900 sm:text-5xl">Şevval</span>
           <Heart
             className="size-5 text-pink-300 drop-shadow-sm sm:size-6"
@@ -132,29 +126,23 @@ export function HomeTab() {
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => openPicker('date')}
-            className="flex min-h-16 min-w-0 items-center gap-2.5 rounded-2xl border border-zinc-200 bg-white px-3 py-2.5 text-left outline-none transition-colors hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-pink-200"
-          >
-              <CalendarDays className="size-4 shrink-0 text-pink-400" aria-hidden="true" />
-              <span className="min-w-0 flex-1 text-left">
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500">Tarih</span>
-                <span className="mt-0.5 block truncate text-sm font-bold text-zinc-900">
-                  {meetupDate
-                    ? new Date(`${meetupDate}T12:00:00`).toLocaleDateString('tr-TR', {
-                        day: 'numeric',
-                        month: 'long',
-                      })
-                    : 'Tarih seç'}
-                </span>
-              </span>
-                <ChevronRight className="size-4 shrink-0 text-zinc-400" aria-hidden="true" />
-            </button>
+          <label className="flex min-h-16 min-w-0 items-center gap-2.5 rounded-2xl border border-zinc-200 bg-white px-3 py-2.5 text-left transition-colors focus-within:ring-2 focus-within:ring-pink-200">
+            <CalendarDays className="size-4 shrink-0 text-pink-400" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500">Tarih</span>
+              <input
+                aria-label="Buluşma tarihi"
+                type="date"
+                value={meetupDate}
+                onChange={(event) => updateSharedState({ meetupDate: event.target.value })}
+                className="mt-0.5 block min-h-6 w-full min-w-0 appearance-none bg-transparent text-sm font-bold text-zinc-900 outline-none"
+              />
+            </span>
+          </label>
 
             <button
               type="button"
-              onClick={() => openPicker('time')}
+              onClick={openTimePicker}
               className="flex min-h-16 min-w-0 items-center gap-2.5 rounded-2xl border border-zinc-200 bg-white px-3 py-2.5 text-left outline-none transition-colors hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-pink-200"
             >
               <Clock3 className="size-4 shrink-0 text-pink-400" aria-hidden="true" />
@@ -189,35 +177,29 @@ export function HomeTab() {
 
       <dialog
         ref={pickerDialogRef}
-        aria-labelledby="meetup-picker-title"
+        aria-labelledby="meetup-time-picker-title"
         onCancel={(event) => {
           event.preventDefault()
-          setActivePicker(null)
+          setIsTimePickerOpen(false)
         }}
         onClick={(event) => {
-          if (event.target === event.currentTarget) setActivePicker(null)
+          if (event.target === event.currentTarget) setIsTimePickerOpen(false)
         }}
         className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm overflow-y-auto rounded-3xl border border-zinc-200 bg-white p-0 text-zinc-900 shadow-2xl backdrop:bg-black/40 backdrop:backdrop-blur-sm"
       >
         <div className="p-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              {activePicker === 'date' ? (
-                <CalendarDays className="size-5 text-pink-400" aria-hidden="true" />
-              ) : (
-                <Clock3 className="size-5 text-pink-400" aria-hidden="true" />
-              )}
+              <Clock3 className="size-5 text-pink-400" aria-hidden="true" />
               <div>
-                <h2 id="meetup-picker-title" className="text-base font-bold">
-                  {activePicker === 'date' ? 'Tarih seç' : 'Saat seç'}
-                </h2>
-                <p className="mt-0.5 text-xs text-zinc-500">Buluşma zamanını düzenle</p>
+                <h2 id="meetup-time-picker-title" className="text-base font-bold">Saat seç</h2>
+                <p className="mt-0.5 text-xs text-zinc-500">Buluşma saatini düzenle</p>
               </div>
             </div>
             <button
               type="button"
               aria-label="Pencereyi kapat"
-              onClick={() => setActivePicker(null)}
+              onClick={() => setIsTimePickerOpen(false)}
               className="grid size-9 shrink-0 place-items-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-200"
             >
               <X className="size-4" aria-hidden="true" />
@@ -225,30 +207,20 @@ export function HomeTab() {
           </div>
 
           <label className="mt-5 flex flex-col gap-2 text-xs font-semibold text-zinc-500">
-            {activePicker === 'date' ? 'Buluşma tarihi' : 'Buluşma saati'}
-            {activePicker === 'date' ? (
-              <input
-                aria-label="Buluşma tarihi"
-                type="date"
-                value={draftDate}
-                onChange={(event) => setDraftDate(event.target.value)}
-                className="min-h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-base font-medium text-zinc-900 outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-100"
-              />
-            ) : (
-              <input
-                aria-label="Buluşma saati"
-                type="time"
-                value={draftTime}
-                onChange={(event) => setDraftTime(event.target.value)}
-                className="min-h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-base font-medium text-zinc-900 outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-100"
-              />
-            )}
+            Buluşma saati
+            <input
+              aria-label="Buluşma saati"
+              type="time"
+              value={draftTime}
+              onChange={(event) => setDraftTime(event.target.value)}
+              className="min-h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-base font-medium text-zinc-900 outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-100"
+            />
           </label>
 
           <div className="mt-6 flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => setActivePicker(null)}
+              onClick={() => setIsTimePickerOpen(false)}
               className="min-h-11 rounded-xl border border-zinc-200 px-4 text-sm font-semibold text-zinc-600 transition-colors hover:bg-zinc-50"
             >
               İptal
@@ -256,10 +228,10 @@ export function HomeTab() {
             <button
               type="button"
               onClick={() => {
-                saveMeetup(draftDate, draftTime)
-                setActivePicker(null)
+                saveMeetupTime(draftTime)
+                setIsTimePickerOpen(false)
               }}
-              disabled={!draftDate || !draftTime}
+              disabled={!draftTime}
               className="min-h-11 rounded-xl bg-zinc-900 px-5 text-sm font-semibold text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Kaydet
