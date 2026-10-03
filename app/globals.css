@@ -141,6 +141,25 @@
   }
 }
 
+.pin-reject-animation {
+  animation: pin-reject 420ms ease-in-out;
+}
+
+@keyframes pin-reject {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-5px);
+  }
+  40%,
+  80% {
+    transform: translateX(5px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, type FormEvent } from 'react'
-import { Heart, LockKeyhole, ScanFace } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Heart, ScanFace } from 'lucide-react'
+import Image from 'next/image'
 import { BottomNav, type TabId } from '@/components/bottom-nav'
 import { FloatingHearts } from '@/components/floating-hearts'
 import { HomeTab } from '@/components/tabs/home-tab'
@@ -15,6 +16,7 @@ const appPin = '0111'
 const rememberedUnlockKey = 'birthday-app-unlocked'
 const biometricCredentialKey = 'birthday-app-biometric-credential'
 const biometricPromptDismissedKey = 'birthday-app-biometric-prompt-dismissed'
+const maxBiometricAttempts = 2
 
 function randomChallenge() {
   return crypto.getRandomValues(new Uint8Array(32))
@@ -43,6 +45,10 @@ export function BirthdayApp() {
   const [canUseBiometric, setCanUseBiometric] = useState(false)
   const [isBiometricBusy, setIsBiometricBusy] = useState(false)
   const [biometricError, setBiometricError] = useState('')
+  const [biometricFailures, setBiometricFailures] = useState(0)
+  const [pinSetupFailed, setPinSetupFailed] = useState(false)
+
+  const showBiometricButton = hasBiometric && biometricFailures < maxBiometricAttempts
 
   useEffect(() => {
     let active = true
@@ -79,9 +85,8 @@ export function BirthdayApp() {
     }
   }, [])
 
-  const unlockApp = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (pin !== appPin) {
+  const unlockApp = (enteredPin: string) => {
+    if (enteredPin !== appPin) {
       setPin('')
       setPinError(true)
       return
@@ -92,10 +97,12 @@ export function BirthdayApp() {
     if (localStorage.getItem(biometricCredentialKey)) {
       localStorage.setItem(rememberedUnlockKey, 'true')
       setIsUnlocked(true)
-    } else if (canUseBiometric) {
+    } else if (pinSetupFailed) {
+      setIsUnlocked(true)
+    } else if (canUseBiometric && !pinSetupFailed) {
       // Start enrollment from the PIN submit gesture so there is no extra
       // in-app confirmation screen before the device's Face ID prompt.
-      await enableBiometric()
+      void enableBiometric()
     } else {
       rememberPinAndUnlock()
     }
@@ -119,8 +126,8 @@ export function BirthdayApp() {
           rp: { name: 'Şevval ♥ Orhan', id: window.location.hostname },
           user: {
             id: new TextEncoder().encode('birthday-app-owner'),
-            name: 'owner',
-            displayName: 'Şevval ♥ Orhan',
+            name: 'SOapp',
+            displayName: 'SOapp',
           },
           pubKeyCredParams: [
             { type: 'public-key', alg: -7 },
@@ -146,7 +153,9 @@ export function BirthdayApp() {
       setHasBiometric(true)
       setIsUnlocked(true)
     } catch {
-      setBiometricError('Face ID ayarlanamadı. PIN ile devam edebilirsin.')
+      setPinSetupFailed(true)
+      setBiometricError('Face ID kurulamadı. PIN kodunu girerek devam et.')
+      setPin('')
     } finally {
       setIsBiometricBusy(false)
     }
@@ -179,7 +188,13 @@ export function BirthdayApp() {
       localStorage.setItem(rememberedUnlockKey, 'true')
       setIsUnlocked(true)
     } catch {
-      setBiometricError('Face ID doğrulanamadı. PIN kodunu kullanabilirsin.')
+      const failures = biometricFailures + 1
+      setBiometricFailures(failures)
+      setBiometricError(
+        failures >= maxBiometricAttempts
+          ? 'Face ID iki kez doğrulanamadı. PIN kodunu gir.'
+          : 'Yüz tanınmadı. Bir kez daha dene.'
+      )
     } finally {
       setIsBiometricBusy(false)
     }
@@ -200,24 +215,24 @@ export function BirthdayApp() {
         </div>
 
         <section aria-labelledby="pin-title" className="relative w-full max-w-sm rounded-3xl border border-white/80 bg-white/85 p-7 text-center shadow-[0_24px_70px_-34px_rgba(24,24,27,0.3)] backdrop-blur-xl sm:p-9">
-          <div className="mx-auto grid size-14 place-items-center rounded-full border border-pink-100 bg-pink-50 text-pink-400">
-            <LockKeyhole className="size-6" aria-hidden="true" />
+          <div className="mx-auto grid size-16 place-items-center rounded-full border border-pink-100 bg-pink-50">
+            <Image src="/icon-512-v3.png" width={56} height={56} alt="" priority className="size-14 object-contain" />
           </div>
-          <p className="mt-5 text-[10px] font-black uppercase tracking-[0.32em] text-zinc-400">Şevval ♥ Orhan</p>
+          <p className="mt-5 text-[10px] font-black uppercase tracking-[0.32em] text-zinc-400">SOapp</p>
           <h1 id="pin-title" className="mt-2 text-2xl font-bold text-zinc-900">
             {!isReady ? 'Açılıyor' : 'Hoş geldin'}
           </h1>
-          <p className="mt-2 text-sm text-zinc-500">
-            {!isReady
-              ? 'Bir saniye...'
-              : hasBiometric
-                ? 'Face ID ile ya da PIN kodunla devam et.'
+          {(!isReady || !hasBiometric) && (
+            <p className="mt-2 text-sm text-zinc-500">
+              {!isReady
+                ? 'Bir saniye...'
                 : canUseBiometric
-                  ? 'PIN kodunu gir. Face ID kurulumu hemen başlayacak.'
-                  : 'Devam etmek için PIN kodunu gir.'}
-          </p>
+                  ? 'PIN’i ilk kez girdikten sonra Face ID açılacak.'
+                  : 'Dört haneli PIN kodunu gir.'}
+            </p>
+          )}
 
-          {hasBiometric && (
+          {showBiometricButton && (
             <button
               type="button"
               onClick={unlockWithBiometric}
@@ -228,49 +243,39 @@ export function BirthdayApp() {
               {isBiometricBusy ? 'Doğrulanıyor…' : 'Face ID ile aç'}
             </button>
           )}
-          <form onSubmit={unlockApp} className={hasBiometric ? 'mt-3' : 'mt-6'}>
+          <div className={showBiometricButton ? 'mt-3' : 'mt-6'}>
             <label htmlFor="app-pin" className="sr-only">Dört haneli PIN kodu</label>
-            <input
-              id="app-pin"
-              type="password"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern="[0-9]*"
-              maxLength={4}
-              autoFocus
-              value={pin}
-              onChange={(event) => {
-                setPin(event.target.value.replace(/\D/g, '').slice(0, 4))
-                setPinError(false)
-              }}
-              aria-invalid={pinError}
-              aria-describedby={pinError ? 'pin-error' : undefined}
-              placeholder="••••"
-              className="h-14 w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 text-center text-2xl font-bold tracking-[0.7em] text-zinc-900 outline-none transition focus:border-pink-300 focus:bg-white focus:ring-4 focus:ring-pink-100"
-            />
+            <div className={pinError ? 'pin-reject-animation' : undefined}>
+              <input
+                id="app-pin"
+                type="password"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]*"
+                maxLength={4}
+                autoFocus
+                disabled={isBiometricBusy}
+                value={pin}
+                onChange={(event) => {
+                  const enteredPin = event.target.value.replace(/\D/g, '').slice(0, 4)
+                  setPin(enteredPin)
+                  setPinError(false)
+                  setBiometricError('')
+                  if (enteredPin.length === 4) unlockApp(enteredPin)
+                }}
+                aria-invalid={pinError}
+                aria-describedby={pinError ? 'pin-error' : undefined}
+                placeholder="••••"
+                className={`h-14 w-full rounded-2xl border px-4 text-center text-2xl font-bold tracking-[0.7em] outline-none transition focus:bg-white focus:ring-4 ${pinError ? 'border-rose-300 bg-rose-50 text-rose-700 focus:border-rose-300 focus:ring-rose-100' : 'border-zinc-200 bg-zinc-50 text-zinc-900 focus:border-pink-300 focus:ring-pink-100'}`}
+              />
+            </div>
             {pinError && (
               <p id="pin-error" role="alert" className="mt-2 text-sm font-medium text-rose-500">
-                PIN kodu hatalı. Tekrar dene.
+                PIN hatalı. Tekrar dene.
               </p>
             )}
-            <button
-              type="submit"
-              disabled={!isReady || pin.length !== 4 || isBiometricBusy}
-              className="mt-4 h-12 w-full rounded-2xl bg-zinc-900 text-sm font-bold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {isBiometricBusy ? 'Face ID açılıyor…' : 'PIN ile aç'}
-            </button>
-          </form>
+          </div>
           {biometricError && <p role="alert" className="mt-3 text-sm font-medium text-rose-500">{biometricError}</p>}
-          {biometricError && (
-            <button
-              type="button"
-              onClick={rememberPinAndUnlock}
-              className="mt-3 h-11 w-full rounded-2xl border border-zinc-200 bg-white text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50"
-            >
-              PIN ile devam et
-            </button>
-          )}
         </section>
       </main>
     )
