@@ -12,13 +12,13 @@ const dancing = Dancing_Script({
 })
 
 export const metadata: Metadata = {
-  title: 'İyi ki Doğdun Sevgilim',
+  title: 'SOapp',
   description: 'Sevgilim için hazırlanmış küçük bir doğum günü sürprizi.',
   generator: 'v0.app',
-  applicationName: 'İyi ki Doğdun',
+  applicationName: 'SOapp',
   appleWebApp: {
     capable: true,
-    title: 'İyi ki Doğdun',
+    title: 'SOapp',
     statusBarStyle: 'default',
   },
   icons: {

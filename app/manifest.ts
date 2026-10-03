@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'İyi ki Doğdun Sevgilim',
-    short_name: 'İyi ki Doğdun',
+    name: 'SOapp',
+    short_name: 'SOapp',
     description: 'Sevgilim için hazırlanmış küçük bir doğum günü sürprizi.',
     start_url: '/',
     display: 'standalone',
