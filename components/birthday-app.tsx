@@ -1,18 +1,38 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { Heart, ScanFace } from 'lucide-react'
 import Image from 'next/image'
 import { BottomNav, type TabId } from '@/components/bottom-nav'
 import { FloatingHearts } from '@/components/floating-hearts'
 import { HomeTab, type AppTheme } from '@/components/tabs/home-tab'
-import { CalendarTab } from '@/components/tabs/calendar-tab'
-import { AchievementsTab } from '@/components/tabs/achievements-tab'
-import { BucketListTab } from '@/components/tabs/bucket-list-tab'
-import { LetterTab } from '@/components/tabs/letter-tab'
 import { SharedAppStateProvider } from '@/lib/shared-app-state'
 
-const appPin = '0111'
+const CalendarTab = dynamic(
+  () => import('@/components/tabs/calendar-tab').then((module) => module.CalendarTab),
+  { loading: () => <TabLoading /> }
+)
+const AchievementsTab = dynamic(
+  () => import('@/components/tabs/achievements-tab').then((module) => module.AchievementsTab),
+  { loading: () => <TabLoading /> }
+)
+const BucketListTab = dynamic(
+  () => import('@/components/tabs/bucket-list-tab').then((module) => module.BucketListTab),
+  { loading: () => <TabLoading /> }
+)
+const LetterTab = dynamic(
+  () => import('@/components/tabs/letter-tab').then((module) => module.LetterTab),
+  { loading: () => <TabLoading /> }
+)
+
+function TabLoading() {
+  return <div aria-label="Yükleniyor" role="status" className="surface-panel h-80 animate-pulse" />
+}
+
+const defaultAppPin = '0111'
+const appPinStorageKey = 'soapp-pin'
+const pinDisabledStorageKey = 'soapp-pin-disabled'
 const rememberedUnlockKey = 'birthday-app-unlocked'
 const biometricCredentialKey = 'birthday-app-biometric-credential'
 const biometricPromptDismissedKey = 'birthday-app-biometric-prompt-dismissed'
@@ -49,15 +69,53 @@ export function BirthdayApp() {
   const [biometricFailures, setBiometricFailures] = useState(0)
   const [pinSetupFailed, setPinSetupFailed] = useState(false)
   const [theme, setTheme] = useState<AppTheme>('light')
+  const [letterBurstKey, setLetterBurstKey] = useState(0)
+  const [appPin, setAppPin] = useState<string | null>(defaultAppPin)
+  const pinInputRef = useRef<HTMLInputElement>(null)
 
   const showBiometricButton = hasBiometric && biometricFailures < maxBiometricAttempts
 
   useEffect(() => {
     const savedTheme = localStorage.getItem(themeStorageKey)
-    const nextTheme: AppTheme = savedTheme === 'dark' ? 'dark' : 'light'
+    const nextTheme: AppTheme = savedTheme === 'dark' ||
+      (savedTheme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+      ? 'dark'
+      : 'light'
     document.documentElement.dataset.theme = nextTheme
     setTheme(nextTheme)
   }, [])
+
+  useEffect(() => {
+    if (isUnlocked) return
+
+    const root = document.documentElement
+    const initialViewportHeight = window.innerHeight
+    // Keep the page fixed, then move only the card by a measured amount. This
+    // avoids iOS re-centering the whole page while still keeping the PIN field
+    // comfortably above the keyboard.
+    root.style.setProperty('--login-viewport-height', `${initialViewportHeight}px`)
+    root.dataset.loginLocked = 'true'
+    const positionLoginCard = () => {
+      const visualViewport = window.visualViewport
+      if (!visualViewport) return
+      const keyboardHeight = Math.max(0, initialViewportHeight - visualViewport.height - visualViewport.offsetTop)
+      const translation = keyboardHeight > 80
+        ? -Math.min(96, Math.max(48, Math.round(keyboardHeight * 0.28)))
+        : 0
+      root.style.setProperty('--login-card-translate', `${translation}px`)
+    }
+    const visualViewport = window.visualViewport
+    visualViewport?.addEventListener('resize', positionLoginCard)
+    visualViewport?.addEventListener('scroll', positionLoginCard)
+
+    return () => {
+      visualViewport?.removeEventListener('resize', positionLoginCard)
+      visualViewport?.removeEventListener('scroll', positionLoginCard)
+      root.style.removeProperty('--login-viewport-height')
+      root.style.removeProperty('--login-card-translate')
+      delete root.dataset.loginLocked
+    }
+  }, [isUnlocked])
 
   const changeTheme = (nextTheme: AppTheme) => {
     localStorage.setItem(themeStorageKey, nextTheme)
@@ -69,9 +127,13 @@ export function BirthdayApp() {
     let active = true
     const storedCredential = localStorage.getItem(biometricCredentialKey)
     const promptDismissed = localStorage.getItem(biometricPromptDismissedKey) === 'true'
+    const pinDisabled = localStorage.getItem(pinDisabledStorageKey) === 'true'
+    const storedPin = localStorage.getItem(appPinStorageKey)
+    const activePin = pinDisabled ? null : (storedPin && /^\d{4}$/.test(storedPin) ? storedPin : defaultAppPin)
+    setAppPin(activePin)
     setHasBiometric(Boolean(storedCredential))
     setIsUnlocked(
-      localStorage.getItem(rememberedUnlockKey) === 'true' && !storedCredential && promptDismissed
+      activePin === null || (localStorage.getItem(rememberedUnlockKey) === 'true' && !storedCredential && promptDismissed)
     )
 
     const canCheckBiometrics =
@@ -101,6 +163,10 @@ export function BirthdayApp() {
   }, [])
 
   const unlockApp = (enteredPin: string) => {
+    if (!appPin) {
+      setIsUnlocked(true)
+      return
+    }
     if (enteredPin !== appPin) {
       setPin('')
       setPinError(true)
@@ -123,10 +189,49 @@ export function BirthdayApp() {
     }
   }
 
+  // iOS does not open the software keyboard for focus that happens during
+  // render. Keep the field unfocused initially, then focus it directly from
+  // the user's touch so the keyboard request is trusted by WebKit.
+  const focusPinInput = () => {
+    const input = pinInputRef.current
+    if (!input || input.disabled) return
+    input.focus()
+  }
+
   const rememberPinAndUnlock = () => {
     localStorage.setItem(rememberedUnlockKey, 'true')
     localStorage.setItem(biometricPromptDismissedKey, 'true')
     setIsUnlocked(true)
+  }
+
+  const disableBiometric = () => {
+    localStorage.removeItem(biometricCredentialKey)
+    localStorage.removeItem(rememberedUnlockKey)
+    localStorage.removeItem(biometricPromptDismissedKey)
+    setHasBiometric(false)
+    setBiometricFailures(0)
+    setPinSetupFailed(false)
+  }
+
+  const changeAppPin = (nextPin: string) => {
+    localStorage.setItem(appPinStorageKey, nextPin)
+    localStorage.removeItem(pinDisabledStorageKey)
+    setAppPin(nextPin)
+  }
+
+  const removeAppPin = (enteredPin: string) => {
+    if (!appPin || enteredPin !== appPin) return false
+    localStorage.removeItem(appPinStorageKey)
+    localStorage.setItem(pinDisabledStorageKey, 'true')
+    setAppPin(null)
+    setIsUnlocked(true)
+    return true
+  }
+
+  const disableBiometricWithPin = (enteredPin: string) => {
+    if (!appPin || enteredPin !== appPin) return false
+    disableBiometric()
+    return true
   }
 
   async function enableBiometric() {
@@ -216,24 +321,25 @@ export function BirthdayApp() {
   }
 
   const changeTab = (next: TabId) => {
+    if (next === tab) {
+      if (next === 'letter') setLetterBurstKey((key) => key + 1)
+      return
+    }
     setTab(next)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    if (next === 'letter') setLetterBurstKey((key) => key + 1)
+    window.scrollTo({ top: 0, behavior: 'instant' })
   }
 
   if (!isReady || !isUnlocked) {
     return (
-      <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-[radial-gradient(ellipse_at_top,rgba(244,114,182,0.1),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.9),rgba(245,245,247,1))] px-5">
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-          <Heart className="absolute left-[12%] top-[18%] size-5 text-pink-200/70" fill="currentColor" strokeWidth={0} />
-          <Heart className="absolute right-[14%] top-[28%] size-3 text-pink-200/70" fill="currentColor" strokeWidth={0} />
-          <Heart className="absolute bottom-[20%] left-[22%] size-4 text-pink-200/70" fill="currentColor" strokeWidth={0} />
-        </div>
+      <main className="login-screen flex items-center justify-center overflow-hidden overscroll-none bg-[radial-gradient(ellipse_at_top,rgba(244,114,182,0.1),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.9),rgba(245,245,247,1))] px-5">
+        <FloatingHearts />
 
-        <section aria-labelledby="pin-title" className="relative w-full max-w-sm rounded-3xl border border-white/80 bg-white/85 p-7 text-center shadow-[0_24px_70px_-34px_rgba(24,24,27,0.3)] backdrop-blur-xl sm:p-9">
-          <div className="mx-auto grid size-16 place-items-center rounded-full border border-pink-100 bg-pink-50">
-            <Image src="/icon-512-v3.png" width={56} height={56} alt="" priority className="size-14 object-contain" />
+        <section aria-labelledby="pin-title" className="login-card relative w-full max-w-sm rounded-3xl border border-white/80 bg-white/85 p-7 text-center shadow-[0_24px_70px_-34px_rgba(24,24,27,0.3)] backdrop-blur-xl sm:p-9">
+          <div className="mx-auto grid size-20 place-items-center rounded-full border border-pink-100 bg-pink-50">
+            <Image src="/icon1.png" width={72} height={72} alt="" priority className="size-[4.5rem] object-contain" />
           </div>
-          <p className="mt-5 text-[10px] font-black uppercase tracking-[0.32em] text-zinc-400">SOapp</p>
+          <p className="mt-5 text-sm font-black tracking-[0.2em] text-zinc-400">SOapp</p>
           <h1 id="pin-title" className="mt-2 text-2xl font-bold text-zinc-900">
             {!isReady ? 'Açılıyor' : 'Hoş geldin'}
           </h1>
@@ -252,7 +358,7 @@ export function BirthdayApp() {
               type="button"
               onClick={unlockWithBiometric}
               disabled={isBiometricBusy}
-              className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-pink-200 bg-pink-50 text-sm font-bold text-zinc-800 transition hover:bg-pink-100 disabled:opacity-50"
+              className="mt-6 flex h-[60px] w-full items-center justify-center gap-2 rounded-2xl border-2 border-pink-200 bg-zinc-50 text-sm font-bold text-zinc-900 hover:bg-white focus:outline-none focus-visible:outline-none disabled:opacity-50"
             >
               <ScanFace className="size-5 text-pink-500" aria-hidden="true" />
               {isBiometricBusy ? 'Doğrulanıyor…' : 'Face ID ile aç'}
@@ -260,17 +366,22 @@ export function BirthdayApp() {
           )}
           <div className={showBiometricButton ? 'mt-3' : 'mt-6'}>
             <label htmlFor="app-pin" className="sr-only">Dört haneli PIN kodu</label>
-            <div className={pinError ? 'pin-reject-animation' : undefined}>
+            <div className={`${pinError ? 'pin-reject-animation ' : ''}h-[60px] rounded-2xl border-2 border-pink-200 bg-zinc-50 transition-colors focus-within:border-pink-400 focus-within:bg-white`}>
               <input
+                ref={pinInputRef}
                 id="app-pin"
                 type="password"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 pattern="[0-9]*"
                 maxLength={4}
-                autoFocus
+                enterKeyHint="done"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 disabled={isBiometricBusy}
                 value={pin}
+                onPointerDown={focusPinInput}
                 onChange={(event) => {
                   const enteredPin = event.target.value.replace(/\D/g, '').slice(0, 4)
                   setPin(enteredPin)
@@ -281,7 +392,7 @@ export function BirthdayApp() {
                 aria-invalid={pinError}
                 aria-describedby={pinError ? 'pin-error' : undefined}
                 placeholder="••••"
-                className={`h-14 w-full rounded-2xl border px-4 text-center text-2xl font-bold tracking-[0.7em] outline-none transition focus:bg-white focus:ring-4 ${pinError ? 'border-rose-300 bg-rose-50 text-rose-700 focus:border-rose-300 focus:ring-rose-100' : 'border-zinc-200 bg-zinc-50 text-zinc-900 focus:border-pink-300 focus:ring-pink-100'}`}
+                className={`login-pin-input h-full w-full rounded-[0.875rem] border-0 px-4 text-center text-2xl font-bold tracking-[0.7em] ${pinError ? 'bg-rose-50 text-rose-700' : 'bg-transparent text-zinc-900'}`}
               />
             </div>
             {pinError && (
@@ -299,15 +410,28 @@ export function BirthdayApp() {
   return (
     <SharedAppStateProvider>
       <div className="app-shell relative min-h-dvh overflow-x-hidden">
-        <FloatingHearts />
+        <FloatingHearts letterBurstKey={letterBurstKey} />
         <main
           id={`panel-${tab}`}
           role="tabpanel"
           aria-labelledby={`tab-${tab}`}
           className="relative mx-auto w-full max-w-md px-5 pt-[max(env(safe-area-inset-top),1.5rem)] pb-32"
         >
-          <div key={tab} className="animate-[fadeIn_0.35s_ease,slideIn_0.4s_cubic-bezier(0.22,1,0.36,1)]">
-            {tab === 'home' && <HomeTab theme={theme} onThemeChange={changeTheme} />}
+          <div key={tab} className="tab-view">
+            {tab === 'home' && (
+              <HomeTab
+                theme={theme}
+                onThemeChange={changeTheme}
+                faceIdEnabled={hasBiometric}
+                faceIdAvailable={canUseBiometric}
+                faceIdBusy={isBiometricBusy}
+                pinEnabled={appPin !== null}
+                onFaceIdEnable={() => void enableBiometric()}
+                onFaceIdRemove={disableBiometricWithPin}
+                onPinChange={changeAppPin}
+                onPinRemove={removeAppPin}
+              />
+            )}
             {tab === 'calendar' && <CalendarTab />}
             {tab === 'achievements' && <AchievementsTab />}
             {tab === 'todo' && <BucketListTab />}

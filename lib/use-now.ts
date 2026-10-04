@@ -2,36 +2,57 @@
 
 import { useSyncExternalStore } from 'react'
 
-let current = 0
-const listeners = new Set<() => void>()
-let timer: ReturnType<typeof setInterval> | null = null
+type ClockStore = { subscribe: (listener: () => void) => () => void; getSnapshot: () => number | null }
+const clocks = new Map<number, ClockStore>()
+const getServerSnapshot = () => null
 
-function subscribe(listener: () => void) {
-  listeners.add(listener)
-  if (!timer) {
+function getClock(interval: number): ClockStore {
+  const existing = clocks.get(interval)
+  if (existing) return existing
+  let current = 0
+  let timer: ReturnType<typeof setInterval> | null = null
+  const listeners = new Set<() => void>()
+  const update = () => {
     current = Date.now()
-    timer = setInterval(() => {
-      current = Date.now()
-      listeners.forEach((l) => l())
-    }, 1000)
+    listeners.forEach(listener => listener())
   }
-  listener()
-  return () => {
-    listeners.delete(listener)
-    if (listeners.size === 0 && timer) {
-      clearInterval(timer)
-      timer = null
+  const stop = () => {
+    if (timer !== null) clearInterval(timer)
+    timer = null
+  }
+  const resume = () => {
+    stop()
+    if (!document.hidden) {
+      update()
+      timer = setInterval(update, interval)
     }
   }
+  const store: ClockStore = {
+    getSnapshot: () => current || null,
+    subscribe: listener => {
+      listeners.add(listener)
+      if (listeners.size === 1) {
+        current = Date.now()
+        document.addEventListener('visibilitychange', resume)
+        resume()
+      }
+      return () => {
+        listeners.delete(listener)
+        if (listeners.size === 0) {
+          stop()
+          document.removeEventListener('visibilitychange', resume)
+        }
+      }
+    },
+  }
+  clocks.set(interval, store)
+  return store
 }
 
 /** Returns the current timestamp (ticking every second) on the client, or null during SSR. */
-export function useNow(): number | null {
-  return useSyncExternalStore(
-    subscribe,
-    () => current || null,
-    () => null
-  )
+export function useNow(interval = 1000): number | null {
+  const clock = getClock(interval)
+  return useSyncExternalStore(clock.subscribe, clock.getSnapshot, getServerSnapshot)
 }
 
 export function splitDuration(ms: number) {

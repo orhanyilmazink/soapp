@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
   Clapperboard,
@@ -35,33 +35,79 @@ const shortLabels: Record<ActiveCategoryId, string> = {
 }
 
 type Filter = ActiveCategoryId | 'all'
+type BucketItem = { id: string; text: string; custom: boolean }
+type PendingDeletion = { ids: string[]; category: ActiveCategoryId }
+
+const rowExitDuration = 360
 
 export function BucketListTab() {
   const { done, custom, toggle, add, remove } = useSharedBucketList()
   const [filter, setFilter] = useState<Filter>('all')
   const [editingCategory, setEditingCategory] = useState<ActiveCategoryId | null>(null)
   const [selectedForDeletion, setSelectedForDeletion] = useState<string[]>([])
+  const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null)
+  const removeRef = useRef(remove)
+
+  useEffect(() => {
+    removeRef.current = remove
+  }, [remove])
+
+  useEffect(() => {
+    if (!pendingDeletion) return
+    const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : rowExitDuration
+    const timeout = window.setTimeout(() => {
+      removeRef.current(pendingDeletion.ids)
+      setSelectedForDeletion([])
+      setEditingCategory(null)
+      setPendingDeletion(null)
+    }, delay)
+
+    return () => window.clearTimeout(timeout)
+  }, [pendingDeletion])
+
   const changeFilter = (nextFilter: Filter) => {
     setFilter(nextFilter)
     setEditingCategory(null)
     setSelectedForDeletion([])
+    setPendingDeletion(null)
   }
 
-  const groups = categories.map((cat) => {
-    const items = [
-      ...cat.items.map((i) => ({ ...i, custom: false })),
-      ...custom.filter((c) => c.category === cat.id).map((c) => ({ id: c.id, text: c.text, custom: true })),
-    ]
-
-    return {
-      ...cat,
-      items: [...items].sort((a, b) => Number(done.has(a.id)) - Number(done.has(b.id))),
+  const { groups, totalCount, doneCount } = useMemo(() => {
+    const customByCategory = new Map<string, BucketItem[]>()
+    for (const item of custom) {
+      const items = customByCategory.get(item.category) ?? []
+      items.push({ id: item.id, text: item.text, custom: true })
+      customByCategory.set(item.category, items)
     }
-  })
 
-  const allItems = groups.flatMap((g) => g.items)
-  const doneCount = allItems.filter((i) => done.has(i.id)).length
-  const percent = allItems.length ? Math.round((doneCount / allItems.length) * 100) : 0
+    let totalCount = 0
+    let doneCount = 0
+    const groups = categories.map((category) => {
+      const customItems = customByCategory.get(category.id) ?? []
+      const items = [...category.items.map((item) => ({ ...item, custom: false })), ...customItems]
+      const remaining: BucketItem[] = []
+      const completed: BucketItem[] = []
+      for (const item of items) {
+        if (done.has(item.id)) completed.push(item)
+        else remaining.push(item)
+      }
+      totalCount += items.length
+      doneCount += completed.length
+
+      return {
+        ...category,
+        items: [...remaining, ...completed],
+        doneCount: completed.length,
+        customCount: customItems.length,
+      }
+    })
+
+    return { groups, totalCount, doneCount }
+  }, [custom, done])
+
+  const selectedIds = useMemo(() => new Set(selectedForDeletion), [selectedForDeletion])
+  const deletingIds = useMemo(() => new Set(pendingDeletion?.ids ?? []), [pendingDeletion])
+  const percent = totalCount ? Math.round((doneCount / totalCount) * 100) : 0
   const visible = filter === 'all' ? groups : groups.filter((g) => g.id === filter)
 
   return (
@@ -77,7 +123,7 @@ export function BucketListTab() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] opacity-70">Tamamlanan</p>
             <p className="mt-1 text-3xl font-extrabold tabular-nums">
               {doneCount}
-              <span className="text-lg font-semibold opacity-60">{` / ${allItems.length}`}</span>
+              <span className="text-lg font-semibold opacity-60">{` / ${totalCount}`}</span>
             </p>
           </div>
           <p className="text-4xl font-extrabold tabular-nums text-primary">{`%${percent}`}</p>
@@ -90,14 +136,14 @@ export function BucketListTab() {
           aria-label="Tamamlanma oranı"
           className="mt-4 h-2.5 overflow-hidden rounded-full bg-background/15"
         >
-          <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${percent}%` }} />
+          <div className="h-full rounded-full bg-primary transition-[width] duration-500 ease-[var(--motion-ease)]" style={{ width: `${percent}%` }} />
         </div>
       </section>
 
       <div
         role="group"
         aria-label="Kategoriler"
-        className="mx-auto mb-5 flex w-full max-w-md items-center gap-1 rounded-full border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(244,244,246,0.92))] p-1.5 shadow-[0_18px_40px_-22px_rgba(15,23,42,0.5),inset_0_1px_0_rgba(255,255,255,0.92)] backdrop-blur-xl"
+        className="mx-auto mb-5 flex w-full max-w-md items-center gap-1 rounded-full border border-border/70 bg-card p-1.5 shadow-[0_12px_28px_-22px_rgba(15,23,42,0.5)]"
       >
         <FilterChip active={filter === 'all'} onClick={() => changeFilter('all')} icon={LayoutGrid} label="Tümü" />
         {groups.map((g) => (
@@ -108,7 +154,7 @@ export function BucketListTab() {
             icon={icons[g.id]}
             label={g.label}
             shortLabel={shortLabels[g.id]}
-            count={`${g.items.filter((i) => done.has(i.id)).length}/${g.items.length}`}
+            count={`${g.doneCount}/${g.items.length}`}
           />
         ))}
       </div>
@@ -116,7 +162,6 @@ export function BucketListTab() {
       <div className="flex flex-col gap-5">
         {visible.map((group) => {
           const Icon = icons[group.id]
-          const groupDone = group.items.filter((i) => done.has(i.id)).length
           return (
             <section key={group.id} aria-labelledby={`cat-${group.id}`} className="surface-panel p-4">
               <header className="mb-3 flex items-center gap-3">
@@ -127,46 +172,66 @@ export function BucketListTab() {
                   {group.label}
                 </h2>
                 <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-bold tabular-nums text-muted-foreground">
-                  {`${groupDone}/${group.items.length}`}
+                  {`${group.doneCount}/${group.items.length}`}
                 </span>
               </header>
 
               <ul className="flex flex-col">
                 {group.items.map((item) => {
                   const isDone = done.has(item.id)
-                  const isSelectedForDeletion = selectedForDeletion.includes(item.id)
+                  const isSelectedForDeletion = selectedIds.has(item.id)
+                  const isDeleting = deletingIds.has(item.id)
                   return (
-                    <li key={item.id} className="flex items-center gap-1 border-t border-border/60 first:border-t-0">
-                      <label className="flex min-h-11 flex-1 cursor-pointer items-center gap-3 py-2">
+                    <li
+                      key={item.id}
+                      aria-hidden={isDeleting || undefined}
+                      className={cn(
+                        'grid border-t border-border/60 transition-[grid-template-rows,opacity,transform,border-color] duration-[360ms] ease-[var(--motion-ease)] first:border-t-0',
+                        isDeleting ? 'pointer-events-none grid-rows-[0fr] -translate-y-1 scale-[0.98] border-transparent opacity-0' : 'grid-rows-[1fr] scale-100 opacity-100'
+                      )}
+                    >
+                      <div className="flex min-h-0 items-center gap-1 overflow-hidden">
+                      <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 py-2">
                         <input
                           type="checkbox"
                           checked={isDone}
                           onChange={() => toggle(item.id)}
+                          disabled={isDeleting}
                           className="peer sr-only"
                         />
                         <span
                           aria-hidden="true"
                           className={cn(
-                            'flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-card',
+                            'flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-[color,background-color,border-color,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)] peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-card',
                             isDone ? 'border-primary bg-primary text-primary-foreground' : 'border-border'
                           )}
                         >
-                          {isDone && <Check className="size-3.5 animate-in zoom-in-50 duration-200" strokeWidth={3.5} />}
+                          <Check
+                            className={cn('size-3.5 transition-[opacity,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)]', isDone ? 'scale-100 opacity-100' : 'scale-50 opacity-0')}
+                            strokeWidth={3.5}
+                          />
                         </span>
                         <span
                           className={cn(
-                            'text-sm leading-snug transition-colors',
+                            'break-words text-sm leading-snug transition-colors duration-[var(--motion-duration)] ease-[var(--motion-ease)]',
                             isDone ? 'text-muted-foreground line-through decoration-primary/70' : 'text-foreground'
                           )}
                         >
                           {item.text}
                         </span>
                       </label>
-                      {editingCategory === group.id && item.custom && (
-                        <label className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full">
+                      {item.custom && (
+                        <label
+                          aria-hidden={editingCategory !== group.id || undefined}
+                          className={cn(
+                            'flex h-10 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full transition-[width,opacity,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)]',
+                            editingCategory === group.id ? 'w-10 opacity-100' : 'pointer-events-none w-0 translate-x-1 opacity-0'
+                          )}
+                        >
                           <input
                             type="checkbox"
                             checked={isSelectedForDeletion}
+                            disabled={pendingDeletion !== null || editingCategory !== group.id}
                             onChange={() => {
                               setSelectedForDeletion((selected) =>
                                 selected.includes(item.id)
@@ -180,16 +245,20 @@ export function BucketListTab() {
                           <span
                             aria-hidden="true"
                             className={cn(
-                              'flex size-6 items-center justify-center rounded-md border-2 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-card',
+                              'flex size-6 shrink-0 items-center justify-center rounded-md border-2 transition-[color,background-color,border-color,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)] peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-card',
                               isSelectedForDeletion
-                                ? 'border-destructive bg-destructive text-destructive-foreground'
-                                : 'border-border hover:border-destructive/70'
+                                ? 'scale-100 border-foreground bg-foreground text-background'
+                                : 'scale-95 border-border hover:border-foreground/70'
                             )}
                           >
-                            {isSelectedForDeletion && <Check className="size-3.5" strokeWidth={3.5} />}
+                            <Check
+                              className={cn('size-3.5 transition-[opacity,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)]', isSelectedForDeletion ? 'scale-100 opacity-100' : 'scale-50 opacity-0')}
+                              strokeWidth={3.5}
+                            />
                           </span>
                         </label>
                       )}
+                      </div>
                     </li>
                   )
                 })}
@@ -204,19 +273,25 @@ export function BucketListTab() {
                 label={group.label}
                 onAdd={(text) => add(group.id, text)}
                 canEdit={
-                  group.items.some((item) => item.custom) &&
+                  group.customCount > 0 &&
                   (editingCategory === null || editingCategory === group.id)
                 }
                 isEditing={editingCategory === group.id}
                 selectedCount={selectedForDeletion.length}
+                isDeleting={pendingDeletion?.category === group.id}
                 onEditAction={() => {
+                  if (pendingDeletion) return
                   if (editingCategory !== group.id) {
                     setEditingCategory(group.id)
                     setSelectedForDeletion([])
                     return
                   }
 
-                  if (selectedForDeletion.length > 0) remove(selectedForDeletion)
+                  const ids = group.items.filter((item) => item.custom && selectedIds.has(item.id)).map((item) => item.id)
+                  if (ids.length > 0) {
+                    setPendingDeletion({ ids, category: group.id })
+                    return
+                  }
                   setSelectedForDeletion([])
                   setEditingCategory(null)
                 }}
@@ -252,26 +327,30 @@ function FilterChip({
       aria-label={count ? `${label} ${count}` : label}
       title={label}
       className={cn(
-        'group relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full px-0.5 py-2 text-[9px] font-semibold transition-all duration-250 ease-out sm:text-[10px]',
+        'group relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full px-0.5 py-2 text-[9px] font-semibold transition-[color,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)] active:scale-95 sm:text-[10px]',
         active
           ? 'text-foreground'
-          : 'scale-[0.94] text-zinc-500 hover:text-zinc-700'
+          : 'scale-[0.94] text-muted-foreground hover:text-foreground'
       )}
     >
-      {active && (
-        <span className="absolute inset-0 rounded-full bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(244,114,182,0.1),rgba(255,255,255,0.82))] shadow-[inset_0_1px_1px_rgba(255,255,255,0.96),0_12px_24px_-18px_rgba(24,24,27,0.6)] backdrop-blur-xl" />
-      )}
+      <span
+        aria-hidden="true"
+        className={cn(
+          'absolute inset-0 rounded-full bg-gradient-to-br from-card to-secondary/70 shadow-[0_8px_16px_-12px_rgba(24,24,27,0.4)] transition-opacity duration-[var(--motion-duration)] ease-[var(--motion-ease)]',
+          active ? 'opacity-100' : 'opacity-0'
+        )}
+      />
       <span className={cn(
-        'relative flex flex-col items-center gap-0.5 transition-all duration-250 ease-out',
+        'relative flex flex-col items-center gap-0.5 transition-[opacity,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)]',
         active ? 'scale-105' : 'scale-90 opacity-80'
       )}>
         <Icon
-          className={cn('size-5 transition-all duration-250 ease-out', active ? 'text-primary' : '')}
+          className={cn('size-5', active ? 'text-primary' : '')}
           aria-hidden="true"
           fill={active ? 'currentColor' : 'none'}
           strokeWidth={active ? 1.8 : 2}
         />
-        <span className={cn('max-w-full truncate leading-none transition-all duration-250', active ? 'font-bold text-foreground' : 'font-medium')}>
+        <span className={cn('max-w-full truncate leading-none transition-colors duration-[var(--motion-duration)] ease-[var(--motion-ease)]', active ? 'font-bold text-foreground' : 'font-medium')}>
           {shortLabel ?? label}
         </span>
         {count && <span className="text-[9px] leading-none tabular-nums opacity-60">{count}</span>}
@@ -286,6 +365,7 @@ function AddItemForm({
   canEdit,
   isEditing,
   selectedCount,
+  isDeleting,
   onEditAction,
 }: {
   label: string
@@ -293,6 +373,7 @@ function AddItemForm({
   canEdit: boolean
   isEditing: boolean
   selectedCount: number
+  isDeleting: boolean
   onEditAction: () => void
 }) {
   const [text, setText] = useState('')
@@ -318,13 +399,13 @@ function AddItemForm({
         maxLength={80}
         placeholder={isEditing ? 'Silinecek maddeleri seç...' : 'Kendi planını ekle...'}
         disabled={isEditing}
-        className="h-10 min-w-0 flex-1 rounded-full border border-border bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none disabled:opacity-60"
+        className="h-10 min-w-0 flex-1 rounded-full border border-border bg-background px-4 text-sm text-foreground transition-[border-color,opacity] duration-[var(--motion-duration)] ease-[var(--motion-ease)] placeholder:text-muted-foreground focus:border-primary focus:outline-none disabled:opacity-60"
       />
       <button
         type="submit"
         aria-label="Ekle"
         disabled={!text.trim() || isEditing}
-        className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-40"
+        className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-[opacity,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)] active:scale-95 disabled:opacity-40"
       >
         <Plus className="size-4" aria-hidden="true" />
       </button>
@@ -345,23 +426,37 @@ function AddItemForm({
               ? `Seçilen ${selectedCount} maddeyi sil`
               : 'Düzenlemeyi bitir'
         }
-        disabled={!canEdit && !isEditing}
+        disabled={isDeleting || (!canEdit && !isEditing)}
+        aria-busy={isDeleting || undefined}
         className={cn(
-          'flex h-10 shrink-0 items-center justify-center gap-1 rounded-full transition-colors disabled:opacity-40',
+          'relative flex size-10 shrink-0 items-center justify-center rounded-full bg-muted transition-[color,background-color,transform,opacity] duration-[var(--motion-duration)] ease-[var(--motion-ease)] active:scale-95 disabled:opacity-40',
           isEditing && selectedCount > 0
-            ? 'bg-destructive px-3 text-destructive-foreground'
-            : 'size-10 bg-muted text-muted-foreground hover:text-foreground'
+            ? 'text-[#000000] dark:text-[#ffffff]'
+            : 'text-muted-foreground hover:text-foreground'
         )}
       >
-        {isEditing && selectedCount > 0 ? (
-          <>
-            <Trash2 className="size-4" aria-hidden="true" />
-            <span className="text-xs font-bold">{selectedCount}</span>
-          </>
-        ) : isEditing ? (
-          <Check className="size-4" aria-hidden="true" />
-        ) : (
+        <span
+          aria-hidden="true"
+          className={cn('absolute transition-[opacity,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)]', !isEditing ? 'scale-100 opacity-100' : 'scale-75 opacity-0')}
+        >
           <Pencil className="size-4" aria-hidden="true" />
+        </span>
+        <span
+          aria-hidden="true"
+          className={cn('absolute transition-[opacity,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)]', isEditing && selectedCount === 0 ? 'scale-100 opacity-100' : 'scale-75 opacity-0')}
+        >
+          <Check className="size-4" aria-hidden="true" />
+        </span>
+        <span
+          aria-hidden="true"
+          className={cn('absolute transition-[opacity,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)]', isEditing && selectedCount > 0 ? 'scale-100 opacity-100' : 'scale-75 opacity-0')}
+        >
+          <Trash2 className="size-4" aria-hidden="true" />
+        </span>
+        {isEditing && selectedCount > 0 && (
+          <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-foreground px-1 py-0.5 text-[9px] font-bold leading-none text-background">
+            {selectedCount}
+          </span>
         )}
       </button>
     </form>

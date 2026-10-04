@@ -1,43 +1,28 @@
 'use client'
 
-import { useState } from 'react'
-import { Cake, Gift, Heart, Lock, MailOpen, Sparkles } from 'lucide-react'
+import { memo, useState, type ReactNode } from 'react'
+import { Gift, Heart, Lock, MailOpen, Sparkles } from 'lucide-react'
 import { SectionHeader } from '@/components/section-header'
-import { birthdayWish, config, gift, letter } from '@/lib/config'
+import { config, gift, letter } from '@/lib/config'
+import { useSharedAppState } from '@/lib/shared-app-state'
 import { splitDuration, useNow } from '@/lib/use-now'
 
 export function LetterTab() {
   const now = useNow()
+  const { state } = useSharedAppState()
   const [opened, setOpened] = useState(false)
   const unlockAt = new Date(config.birthday).getTime()
   const unlocked = now !== null && now >= unlockAt
-  const formattedDate = new Date(config.birthday).toLocaleDateString('tr-TR', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
-
   return (
     <div>
-      <section aria-label="Doğum günü kutlaması" className="mb-8 flex flex-col items-center pt-4 text-center">
-        <div className="relative mb-3">
-          <div className="absolute inset-0 rounded-full bg-primary/25 blur-2xl" aria-hidden="true" />
-          <div className="relative flex size-20 items-center justify-center rounded-full border-4 border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(255,240,242,0.8))] shadow-[0_18px_38px_-20px_rgba(251,113,133,0.7)]">
-            <Cake className="size-9 animate-heartbeat text-primary" aria-hidden="true" />
-          </div>
-        </div>
-        <p className="py-1 font-script text-5xl font-bold leading-[1.2] text-foreground drop-shadow-[0_8px_18px_rgba(251,113,133,0.12)]">İyi ki Doğdun</p>
-        <p className="mt-1 py-0.5 font-script text-3xl font-medium leading-tight text-primary">{config.partnerName}</p>
+      <section aria-label="Doğum günü kutlaması" className="mb-8 text-center">
+        <SectionHeader title={<>İyi ki Doğdun<br />{config.partnerName}</>} largeTitle />
         <div className="surface-panel mt-5 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(255,247,249,0.8))] px-5 py-5 text-left">
-          <p className="font-serif text-[16px] leading-8 tracking-[0.01em] text-foreground text-pretty">{birthdayWish}</p>
+          <p className="font-serif text-[16px] leading-8 tracking-[0.01em] text-foreground text-pretty">{state.specialMessage}</p>
         </div>
       </section>
 
-      <SectionHeader
-        eyebrow="Sadece senin için"
-        title="Özel Hediye"
-        description={unlocked ? 'Mektubun ve hediyen hazır. Zarfı açmak için dokun.' : `Bu mektup ${formattedDate} günü açılacak.`}
-      />
+      <SectionHeader title="Özel Hediye" largeTitle />
 
       {now === null ? (
         <div className="h-80 animate-pulse rounded-3xl bg-muted" />
@@ -64,18 +49,21 @@ export function LetterTab() {
   )
 }
 
-function Envelope({ children }: { children: React.ReactNode }) {
+function Envelope({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
   return (
-    <div className="surface-panel relative mx-auto aspect-[4/3] w-full overflow-hidden bg-secondary shadow-[0_18px_35px_-24px_rgba(24,24,27,0.24)]">
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-1/2 bg-accent [clip-path:polygon(0_0,100%_0,50%_100%)]"
-      />
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 bottom-0 h-1/2 bg-card/60 [clip-path:polygon(0_100%,50%_0,100%_100%)]"
-      />
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">{children}</div>
+    <div className="surface-panel mx-auto w-full overflow-hidden shadow-[0_18px_35px_-24px_rgba(24,24,27,0.24)]">
+      <div className="relative aspect-[4/3] w-full overflow-hidden bg-secondary">
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-1/2 bg-accent [clip-path:polygon(0_0,100%_0,50%_100%)]"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 bottom-0 h-1/2 bg-card/60 [clip-path:polygon(0_100%,50%_0,100%_100%)]"
+        />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">{children}</div>
+      </div>
+      {footer && <div className="border-t border-border/80 bg-card/40 p-4">{footer}</div>}
     </div>
   )
 }
@@ -90,8 +78,19 @@ function LockedEnvelope({ remaining }: { remaining: number }) {
   ]
 
   return (
-    <div className="flex flex-col gap-6">
-      <Envelope>
+    <section aria-label="Mektup ve açılmasına kalan süre">
+      <Envelope
+        footer={(
+          <dl className="grid grid-cols-4 gap-2 text-center">
+          {units.map((u) => (
+            <div key={u.label} className="flex flex-col-reverse rounded-2xl bg-muted px-1 py-3">
+              <dt className="text-[11px] font-semibold text-muted-foreground">{u.label}</dt>
+              <dd className="text-2xl font-extrabold tabular-nums text-primary">{u.value.toString().padStart(2, '0')}</dd>
+            </div>
+          ))}
+          </dl>
+        )}
+      >
         <span className="flex size-16 animate-wiggle items-center justify-center rounded-full border-4 border-card bg-primary text-primary-foreground shadow-lg">
           <Lock className="size-7" aria-hidden="true" />
         </span>
@@ -99,24 +98,11 @@ function LockedEnvelope({ remaining }: { remaining: number }) {
           Henüz kilitli
         </span>
       </Envelope>
-
-      <section aria-label="Mektubun açılmasına kalan süre" className="surface-panel p-5 text-center">
-        <h2 className="font-sans text-xs font-bold tracking-wide text-primary/80">Açılmasına kalan süre</h2>
-        <dl className="mt-3 grid grid-cols-4 gap-2">
-          {units.map((u) => (
-            <div key={u.label} className="flex flex-col-reverse rounded-2xl bg-muted py-3">
-<dt className="text-[11px] font-semibold text-muted-foreground">{u.label}</dt>
-<dd className="text-2xl font-extrabold tabular-nums text-primary">{u.value.toString().padStart(2, '0')}</dd>
-            </div>
-          ))}
-        </dl>
-        <p className="mt-4 font-serif text-[16px] leading-7 tracking-[0.01em] text-muted-foreground">Sabırsızlanma, en güzel şeyler beklemeye değer.</p>
-      </section>
-    </div>
+    </section>
   )
 }
 
-function LetterPaper() {
+const LetterPaper = memo(function LetterPaper() {
   return (
     <article className="surface-panel relative px-6 py-8 animate-in fade-in zoom-in-95 slide-in-from-bottom-6 duration-700 [background-image:repeating-linear-gradient(transparent,transparent_31px,oklch(0.88_0_0/0.6)_32px)]">
       <Heart
@@ -138,7 +124,7 @@ function LetterPaper() {
       <GiftBox />
     </article>
   )
-}
+})
 
 function GiftBox() {
   const [revealed, setRevealed] = useState(false)

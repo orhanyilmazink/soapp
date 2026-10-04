@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Clapperboard,
   Compass,
@@ -30,7 +30,6 @@ type AchievementCategoryId = 'relationship' | ActiveCategoryId
 type Achievement = { count: number; title: string; detail: string; icon: LucideIcon }
 type RelationshipMilestoneId = 'isteme' | 'soz' | 'nisan' | 'kina' | 'evlilik'
 
-const relationshipMilestonesKey = 'relationship-life-milestones'
 const relationshipMilestones: { id: RelationshipMilestoneId; title: string }[] = [
   { id: 'isteme', title: 'İsteme' },
   { id: 'soz', title: 'Söz' },
@@ -122,7 +121,7 @@ const categories: { id: AchievementCategoryId; label: string; shortLabel: string
 ]
 
 export function AchievementsTab() {
-  const now = useNow()
+  const now = useNow(60_000)
   const [activeCategory, setActiveCategory] = useState<AchievementCategoryId>('relationship')
   const { done, custom } = useSharedBucketList()
   const { state, updateSharedState } = useSharedAppState()
@@ -131,12 +130,12 @@ export function AchievementsTab() {
   const togetherDays = now
     ? Math.max(0, Math.floor((now - new Date(`${state.togetherSince}T00:00:00`).getTime()) / 86_400_000))
     : 0
-  const completedCounts = todoCategories.reduce<Record<ActiveCategoryId, number>>((counts, category) => {
+  const completedCounts = useMemo(() => todoCategories.reduce<Record<ActiveCategoryId, number>>((counts, category) => {
     const completedBuiltIn = category.items.filter((item) => done.has(item.id)).length
     const completedCustom = custom.filter((item) => item.category === category.id && done.has(item.id)).length
     counts[category.id] = completedBuiltIn + completedCustom
     return counts
-  }, {} as Record<ActiveCategoryId, number>)
+  }, {} as Record<ActiveCategoryId, number>), [done, custom])
   const currentCounts: Record<AchievementCategoryId, number> = { relationship: togetherDays, ...completedCounts }
   const currentCount = currentCounts[activeCategory]
   const activeAchievements = achievements[activeCategory]
@@ -196,7 +195,7 @@ export function AchievementsTab() {
           className="mt-4 h-2.5 overflow-hidden rounded-full bg-background/15"
         >
           <div
-            className="h-full rounded-full bg-primary transition-all duration-500"
+            className="h-full rounded-full bg-primary transition-[width] duration-500"
             style={{ width: `${totalAchievements ? (unlockedTotal / totalAchievements) * 100 : 0}%` }}
           />
         </div>
@@ -219,24 +218,22 @@ export function AchievementsTab() {
                 aria-selected={isActive}
                 onClick={() => setActiveCategory(id)}
                 className={cn(
-                  'group relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full px-0.5 py-2 text-[9px] font-semibold transition-all duration-250 ease-out sm:text-[10px]',
+                  'group relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full px-0.5 py-2 text-[9px] font-semibold transition-[color,transform] duration-250 sm:text-[10px]',
                   isActive ? 'text-foreground' : 'scale-[0.94] text-zinc-500 hover:text-zinc-700'
                 )}
               >
-                {isActive && (
-                  <span className="absolute inset-0 rounded-full bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(244,114,182,0.1),rgba(255,255,255,0.82))] shadow-[inset_0_1px_1px_rgba(255,255,255,0.96),0_12px_24px_-18px_rgba(24,24,27,0.6)] backdrop-blur-xl" />
-                )}
+                <span aria-hidden="true" className={cn('absolute inset-0 rounded-full bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(244,114,182,0.1),rgba(255,255,255,0.82))] shadow-[inset_0_1px_1px_rgba(255,255,255,0.96),0_12px_24px_-18px_rgba(24,24,27,0.6)] transition-opacity', isActive ? 'opacity-100' : 'opacity-0')} />
                 <span className={cn(
-                  'relative flex flex-col items-center gap-0.5 transition-all duration-250 ease-out',
+                  'relative flex flex-col items-center gap-0.5 transition-[transform,opacity] duration-250',
                   isActive ? 'scale-105' : 'scale-90 opacity-80'
                 )}>
                   <CategoryIcon
-                    className={cn('size-5 transition-all duration-250 ease-out', isActive ? 'text-primary' : '')}
+                    className={cn('size-5 transition-colors duration-250', isActive ? 'text-primary' : '')}
                     aria-hidden="true"
                     fill={isActive ? 'currentColor' : 'none'}
                     strokeWidth={isActive ? 1.8 : 2}
                   />
-                  <span className={cn('leading-none transition-all duration-250', isActive ? 'font-bold text-foreground' : 'font-medium')}>
+                  <span className={cn('leading-none transition-colors duration-250', isActive ? 'font-bold text-foreground' : 'font-medium')}>
                     {shortLabel}
                   </span>
                 </span>

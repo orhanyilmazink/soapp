@@ -27,7 +27,7 @@ export function BottomNav({
     >
       <div
         role="tablist"
-        className="mx-auto flex max-w-md items-center justify-between gap-1 rounded-full border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(244,244,246,0.92))] p-1.5 shadow-[0_18px_40px_-22px_rgba(15,23,42,0.5),inset_0_1px_0_rgba(255,255,255,0.92)] backdrop-blur-xl"
+        className="bottom-nav-panel mx-auto flex max-w-md items-center justify-between gap-1 rounded-full border p-1.5 backdrop-blur-xl"
       >
         {tabs.map(({ id, label, icon: Icon }) => {
           const isActive = id === active
@@ -39,28 +39,37 @@ export function BottomNav({
               role="tab"
               aria-selected={isActive}
               aria-controls={`panel-${id}`}
+              tabIndex={isActive ? 0 : -1}
               onClick={() => onChange(id)}
+              onKeyDown={(event) => {
+                const currentIndex = tabs.findIndex((item) => item.id === id)
+                const nextIndex = event.key === 'ArrowRight' ? (currentIndex + 1) % tabs.length
+                  : event.key === 'ArrowLeft' ? (currentIndex + tabs.length - 1) % tabs.length
+                    : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : null
+                if (nextIndex === null) return
+                event.preventDefault()
+                onChange(tabs[nextIndex].id)
+                document.getElementById(`tab-${tabs[nextIndex].id}`)?.focus()
+              }}
               className={cn(
-                'group relative flex flex-1 flex-col items-center gap-0.5 overflow-hidden rounded-full px-1 py-2 text-[10px] font-semibold transition-all duration-250 ease-out',
+                'group relative flex flex-1 flex-col items-center gap-0.5 overflow-hidden rounded-full px-1 py-2 text-[10px] font-semibold transition-[color,transform] duration-250 ease-out',
                 isActive ? 'text-foreground' : 'scale-[0.94] text-zinc-500 hover:text-zinc-700'
               )}
             >
-              {isActive && (
-                <span className="absolute inset-0 rounded-full bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(244,114,182,0.1),rgba(255,255,255,0.82))] shadow-[inset_0_1px_1px_rgba(255,255,255,0.96),0_12px_24px_-18px_rgba(24,24,27,0.6)] backdrop-blur-xl" />
-              )}
+              <span aria-hidden="true" className={cn('bottom-nav-active absolute inset-0 rounded-full transition-opacity', isActive ? 'opacity-100' : 'opacity-0')} />
               <span
                 className={cn(
-                  'relative flex flex-col items-center gap-0.5 transition-all duration-250 ease-out',
+                  'relative flex flex-col items-center gap-0.5 transition-[transform,opacity] duration-250 ease-out',
                   isActive ? 'scale-105' : 'scale-90 opacity-80'
                 )}
               >
                 <Icon
-                  className={cn('size-5 transition-all duration-250 ease-out', isActive ? 'text-primary' : '')}
+                  className={cn('size-5 transition-colors duration-250 ease-out', isActive ? 'text-primary' : '')}
                   aria-hidden="true"
                   fill={isActive ? 'currentColor' : 'none'}
                   strokeWidth={isActive ? 1.8 : 2}
                 />
-                <span className={cn('leading-none transition-all duration-250', isActive ? 'font-bold text-foreground' : 'font-medium')}>
+                <span className={cn('leading-none transition-colors duration-250', isActive ? 'font-bold text-foreground' : 'font-medium')}>
                   {label}
                 </span>
               </span>

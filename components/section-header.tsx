@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 export function SectionHeader({
   eyebrow,
   title,
@@ -5,7 +7,7 @@ export function SectionHeader({
   largeTitle = false,
 }: {
   eyebrow?: string
-  title: string
+  title: ReactNode
   description?: string
   largeTitle?: boolean
 }) {

@@ -1,16 +1,28 @@
 'use client'
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
 import { categories, type ActiveCategoryId, type CategoryId } from '@/lib/bucket-list'
+import { birthdayWish } from '@/lib/config'
 
 export type SharedCustomItem = { id: string; category: CategoryId; text: string }
+export type SharedCalendarEventKind = 'birthday' | 'special' | 'anniversary' | 'plan' | 'celebration'
 export type SharedCalendarEvent = {
   id: string
   title: string
   date: string
-  kind: 'birthday' | 'special'
+  kind: SharedCalendarEventKind
   repeats: boolean
+  note?: string
+}
+export type PushSubscriptionRecord = {
+  id: string
+  endpoint: string
+  expirationTime: number | null
+  keys: {
+    auth: string
+    p256dh: string
+  }
 }
 export type SharedAppData = {
   version: 1
@@ -23,13 +35,14 @@ export type SharedAppData = {
   meetupDate: string
   meetupTime: string
   relationshipMilestones: string[]
+  specialMessage: string
+  pushSubscriptions: PushSubscriptionRecord[]
 }
 
 type SyncStatus = 'local' | 'connecting' | 'saving' | 'connected' | 'offline'
 type SharedAppStateContextValue = {
   state: SharedAppData
   updateSharedState: (patch: Partial<SharedAppData>) => void
-  syncStatus: SyncStatus
 }
 
 const localStateKey = 'shared-app-state-v1'
@@ -46,6 +59,8 @@ const emptyState: SharedAppData = {
   meetupDate: '',
   meetupTime: '',
   relationshipMilestones: [],
+  specialMessage: birthdayWish,
+  pushSubscriptions: [],
 }
 const validMilestones = ['isteme', 'soz', 'nisan', 'kina', 'evlilik']
 
@@ -98,9 +113,17 @@ function normalizeAppData(value: unknown, fallback: SharedAppData = emptyState):
             typeof event.id === 'string' &&
             typeof event.title === 'string' &&
             typeof event.date === 'string' &&
-            (event.kind === 'birthday' || event.kind === 'special') &&
+            (event.kind === 'birthday' ||
+              event.kind === 'special' ||
+              event.kind === 'anniversary' ||
+              event.kind === 'plan' ||
+              event.kind === 'celebration') &&
             typeof event.repeats === 'boolean'
         )
+        .map(({ note, ...event }) => ({
+          ...event,
+          ...(typeof note === 'string' && note.trim() ? { note: note.trim().slice(0, 500) } : {}),
+        }))
       : fallback.calendarEvents,
     meetupDate: typeof input.meetupDate === 'string' ? input.meetupDate : fallback.meetupDate,
     meetupTime: typeof input.meetupTime === 'string' ? input.meetupTime : fallback.meetupTime,
@@ -109,6 +132,34 @@ function normalizeAppData(value: unknown, fallback: SharedAppData = emptyState):
           (item): item is string => typeof item === 'string' && validMilestones.includes(item)
         )
       : fallback.relationshipMilestones,
+    specialMessage: typeof input.specialMessage === 'string'
+      ? input.specialMessage.slice(0, 1500)
+      : fallback.specialMessage,
+    pushSubscriptions: Array.isArray(input.pushSubscriptions)
+      ? input.pushSubscriptions
+        .filter(
+          (subscription): subscription is PushSubscriptionRecord =>
+            !!subscription &&
+            typeof subscription === 'object' &&
+            typeof subscription.id === 'string' &&
+            typeof subscription.endpoint === 'string' &&
+            subscription.endpoint.startsWith('https://') &&
+            (subscription.expirationTime === null || typeof subscription.expirationTime === 'number') &&
+            !!subscription.keys &&
+            typeof subscription.keys === 'object' &&
+            typeof subscription.keys.auth === 'string' &&
+            typeof subscription.keys.p256dh === 'string'
+        )
+        .map((subscription) => ({
+          ...subscription,
+          id: subscription.id.slice(0, 2048),
+          endpoint: subscription.endpoint.slice(0, 2048),
+          keys: {
+            auth: subscription.keys.auth.slice(0, 512),
+            p256dh: subscription.keys.p256dh.slice(0, 512),
+          },
+        }))
+      : fallback.pushSubscriptions,
   }
 }
 
@@ -167,6 +218,8 @@ function mergeLegacyRemote(remoteValue: unknown, local: SharedAppData, mergeLoca
     relationshipMilestones: local.relationshipMilestones.length > remote.relationshipMilestones.length
       ? local.relationshipMilestones
       : remote.relationshipMilestones,
+    specialMessage: remote.specialMessage || local.specialMessage,
+    pushSubscriptions: mergeRecordChanges(local.pushSubscriptions, remote.pushSubscriptions, remote.pushSubscriptions),
   }
 }
 
@@ -223,6 +276,8 @@ function mergeConcurrentChanges(
       desired.relationshipMilestones,
       remote.relationshipMilestones
     ),
+    specialMessage: desired.specialMessage === base.specialMessage ? remote.specialMessage : desired.specialMessage,
+    pushSubscriptions: mergeRecordChanges(base.pushSubscriptions, desired.pushSubscriptions, remote.pushSubscriptions),
   }
 }
 
@@ -250,6 +305,7 @@ export function SharedAppStateProvider({ children }: { children: ReactNode }) {
   const mergeLocalOnFirstSync = useRef(true)
   const writeQueue = useRef<Promise<void>>(Promise.resolve())
   const pendingSaveRef = useRef<(() => Promise<void>) | null>(null)
+  const saveDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const local = loadLocalAppData()
@@ -466,12 +522,14 @@ export function SharedAppStateProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false
       pendingSaveRef.current = null
+      if (saveDebounceTimer.current !== null) clearTimeout(saveDebounceTimer.current)
       if (channel) void client.removeChannel(channel)
     }
   }, [localReady])
 
-  function updateSharedState(patch: Partial<SharedAppData>) {
+  const updateSharedState = useCallback((patch: Partial<SharedAppData>) => {
     const next = normalizeAppData({ ...stateRef.current, ...patch })
+    if (sameAppData(stateRef.current, next)) return
     stateRef.current = next
     setState(next)
     writeLocalAppData(next)
@@ -480,8 +538,17 @@ export function SharedAppStateProvider({ children }: { children: ReactNode }) {
     setSyncStatus('saving')
     // The provider effect owns the cloud queue so all edits use the same
     // compare-and-swap/retry path. The local copy remains available offline.
-    if (pendingSaveRef.current) void pendingSaveRef.current().catch(() => undefined)
-  }
+    if (saveDebounceTimer.current !== null) clearTimeout(saveDebounceTimer.current)
+    saveDebounceTimer.current = setTimeout(() => {
+      saveDebounceTimer.current = null
+      if (pendingSaveRef.current) void pendingSaveRef.current().catch(() => undefined)
+    }, 250)
+  }, [])
+
+  const contextValue = useMemo<SharedAppStateContextValue>(
+    () => ({ state, updateSharedState }),
+    [state, updateSharedState]
+  )
 
   if (!localReady || (supabase && !cloudReady)) {
     return (
@@ -491,7 +558,6 @@ export function SharedAppStateProvider({ children }: { children: ReactNode }) {
     )
   }
 
-  const contextValue: SharedAppStateContextValue = { state, updateSharedState, syncStatus }
   return (
     <SharedAppStateContext.Provider value={contextValue}>
       {syncStatus === 'offline' && syncError && (
@@ -512,7 +578,7 @@ export function useSharedAppState() {
 
 export function useSharedBucketList() {
   const { state, updateSharedState } = useSharedAppState()
-  const done = new Set(state.done)
+  const done = useMemo(() => new Set(state.done), [state.done])
 
   return {
     done,

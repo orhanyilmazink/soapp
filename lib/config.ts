@@ -2,7 +2,6 @@ export const config = {
   partnerName: 'Sevgilim',
   senderName: 'Seni dünyalar kadar seven',
   senderBirthDate: '2005-01-11T00:00:00',
-  togetherSince: '2025-09-23T00:00:00',
   birthDate: '2006-11-01T00:00:00',
   birthday: '2026-11-01T00:00:00',
 }

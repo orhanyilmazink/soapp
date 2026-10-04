@@ -14,9 +14,6 @@ export type Category = {
   items: { id: string; text: string }[]
 }
 
-const list = (prefix: string, texts: string[]) =>
-  texts.map((text, i) => ({ id: `${prefix}-${i + 1}`, text }))
-
 export const categories: Category[] = [
   { id: 'places', label: 'Gezilecek Yerler', items: [] },
   { id: 'games', label: 'Oynanacak Oyunlar', items: [] },
