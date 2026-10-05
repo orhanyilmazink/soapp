@@ -1,16 +1,21 @@
 'use client'
 
-import { Award, CalendarDays, House, ListChecks, Mail, type LucideIcon } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { useLanguage } from '@/lib/language'
+import { useLayoutEffect, useRef } from 'react'
+import { attachViewportDock } from '@/lib/viewport-dock'
 
-export type TabId = 'home' | 'calendar' | 'achievements' | 'todo' | 'letter'
+import { Award, CalendarDays, House, ListChecks, Heart, type LucideIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { DraggableTabList } from '@/components/draggable-tab-list'
+
+export type TabId = 'home' | 'calendar' | 'achievements' | 'todo' | 'wishlist'
 
 const tabs: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'home', label: 'Ana Sayfa', icon: House },
   { id: 'todo', label: 'Yapılacaklar', icon: ListChecks },
-  { id: 'calendar', label: 'Takvim', icon: CalendarDays },
+  { id: 'wishlist', label: 'İstekler', icon: Heart },
   { id: 'achievements', label: 'Başarımlar', icon: Award },
-  { id: 'letter', label: 'Özel Mesaj', icon: Mail },
+  { id: 'calendar', label: 'Takvim', icon: CalendarDays },
 ]
 
 export function BottomNav({
@@ -20,14 +25,23 @@ export function BottomNav({
   active: TabId
   onChange: (tab: TabId) => void
 }) {
+  const { t, language } = useLanguage()
+  const navRef = useRef<HTMLElement>(null)
+
+  useLayoutEffect(() => {
+    if (navRef.current) return attachViewportDock(navRef.current)
+  }, [])
+
   return (
     <nav
-      aria-label="Ana menü"
-      className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)]"
+      ref={navRef}
+      aria-label={t("Ana menü")}
+      className="bottom-nav-dock absolute inset-x-0 bottom-0 z-40 px-4"
     >
-      <div
+      <DraggableTabList
+        onSelect={index => onChange(tabs[index].id)}
         role="tablist"
-        className="bottom-nav-panel mx-auto flex max-w-md items-center justify-between gap-1 rounded-full border p-1.5 backdrop-blur-xl"
+        className="bottom-nav-panel mx-auto flex max-w-md items-center justify-between gap-1 rounded-full border p-1.5"
       >
         {tabs.map(({ id, label, icon: Icon }) => {
           const isActive = id === active
@@ -56,7 +70,6 @@ export function BottomNav({
                 isActive ? 'text-foreground' : 'scale-[0.94] text-zinc-500 hover:text-zinc-700'
               )}
             >
-              <span aria-hidden="true" className={cn('bottom-nav-active absolute inset-0 rounded-full transition-opacity', isActive ? 'opacity-100' : 'opacity-0')} />
               <span
                 className={cn(
                   'relative flex flex-col items-center gap-0.5 transition-[transform,opacity] duration-250 ease-out',
@@ -70,13 +83,13 @@ export function BottomNav({
                   strokeWidth={isActive ? 1.8 : 2}
                 />
                 <span className={cn('leading-none transition-colors duration-250', isActive ? 'font-bold text-foreground' : 'font-medium')}>
-                  {label}
+                  {id === 'achievements' && language === 'en' ? 'Awards' : t(label)}
                 </span>
               </span>
             </button>
           )
         })}
-      </div>
+      </DraggableTabList>
     </nav>
   )
 }

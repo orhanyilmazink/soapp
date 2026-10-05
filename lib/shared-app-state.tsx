@@ -1,12 +1,15 @@
 'use client'
 
+import { useLanguage } from '@/lib/language'
+
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
 import { categories, type ActiveCategoryId, type CategoryId } from '@/lib/bucket-list'
-import { birthdayWish } from '@/lib/config'
+import { calendarPlaceItems, calendarPlaceItemId } from '@/lib/calendar-links'
 
+export type SharedWish = { id: string; owner: 'first' | 'second'; text: string; done: boolean; priority?: boolean }
 export type SharedCustomItem = { id: string; category: CategoryId; text: string }
-export type SharedCalendarEventKind = 'birthday' | 'special' | 'anniversary' | 'plan' | 'celebration'
+export type SharedCalendarEventKind = 'birthday' | 'special' | 'anniversary' | 'plan' | 'celebration' | 'place'
 export type SharedCalendarEvent = {
   id: string
   title: string
@@ -35,7 +38,7 @@ export type SharedAppData = {
   meetupDate: string
   meetupTime: string
   relationshipMilestones: string[]
-  specialMessage: string
+  wishes: SharedWish[]
   pushSubscriptions: PushSubscriptionRecord[]
 }
 
@@ -59,7 +62,7 @@ const emptyState: SharedAppData = {
   meetupDate: '',
   meetupTime: '',
   relationshipMilestones: [],
-  specialMessage: birthdayWish,
+  wishes: [],
   pushSubscriptions: [],
 }
 const validMilestones = ['isteme', 'soz', 'nisan', 'kina', 'evlilik']
@@ -117,7 +120,8 @@ function normalizeAppData(value: unknown, fallback: SharedAppData = emptyState):
               event.kind === 'special' ||
               event.kind === 'anniversary' ||
               event.kind === 'plan' ||
-              event.kind === 'celebration') &&
+              event.kind === 'celebration' ||
+              event.kind === 'place') &&
             typeof event.repeats === 'boolean'
         )
         .map(({ note, ...event }) => ({
@@ -132,9 +136,12 @@ function normalizeAppData(value: unknown, fallback: SharedAppData = emptyState):
           (item): item is string => typeof item === 'string' && validMilestones.includes(item)
         )
       : fallback.relationshipMilestones,
-    specialMessage: typeof input.specialMessage === 'string'
-      ? input.specialMessage.slice(0, 1500)
-      : fallback.specialMessage,
+    wishes: Array.isArray(input.wishes)
+      ? input.wishes.filter((item): item is SharedWish => !!item && typeof item.id === 'string' &&
+          (item.owner === 'first' || item.owner === 'second') && typeof item.text === 'string' &&
+          !!item.text.trim() && typeof item.done === 'boolean')
+        .map((item) => ({ id: item.id.slice(0, 100), owner: item.owner, text: item.text.trim().slice(0, 240), done: item.done, priority: item.priority === true }))
+      : fallback.wishes,
     pushSubscriptions: Array.isArray(input.pushSubscriptions)
       ? input.pushSubscriptions
         .filter(
@@ -218,7 +225,7 @@ function mergeLegacyRemote(remoteValue: unknown, local: SharedAppData, mergeLoca
     relationshipMilestones: local.relationshipMilestones.length > remote.relationshipMilestones.length
       ? local.relationshipMilestones
       : remote.relationshipMilestones,
-    specialMessage: remote.specialMessage || local.specialMessage,
+    wishes: mergeRecordChanges([], local.wishes, remote.wishes),
     pushSubscriptions: mergeRecordChanges(local.pushSubscriptions, remote.pushSubscriptions, remote.pushSubscriptions),
   }
 }
@@ -256,6 +263,25 @@ function mergeRecordChanges<T extends { id: string }>(base: T[], desired: T[], r
   return [...merged.values()]
 }
 
+function mergeWishChanges(base: SharedWish[], desired: SharedWish[], remote: SharedWish[]) {
+  const baseById = new Map(base.map((wish) => [wish.id, wish]))
+  const desiredById = new Map(desired.map((wish) => [wish.id, wish]))
+  const remoteById = new Map(remote.map((wish) => [wish.id, wish]))
+  const merged = mergeRecordChanges(base, desired, remote)
+  return merged.map((wish) => {
+    const before = baseById.get(wish.id)
+    const local = desiredById.get(wish.id)
+    const other = remoteById.get(wish.id)
+    if (!before || !local || !other) return wish
+    return {
+      ...wish,
+      text: local.text === before.text ? other.text : local.text,
+      done: local.done === before.done ? other.done : local.done,
+      priority: (local.priority === true) === (before.priority === true) ? other.priority === true : local.priority === true,
+    }
+  })
+}
+
 function mergeConcurrentChanges(
   base: SharedAppData,
   desired: SharedAppData,
@@ -276,7 +302,7 @@ function mergeConcurrentChanges(
       desired.relationshipMilestones,
       remote.relationshipMilestones
     ),
-    specialMessage: desired.specialMessage === base.specialMessage ? remote.specialMessage : desired.specialMessage,
+    wishes: mergeWishChanges(base.wishes, desired.wishes, remote.wishes),
     pushSubscriptions: mergeRecordChanges(base.pushSubscriptions, desired.pushSubscriptions, remote.pushSubscriptions),
   }
 }
@@ -294,6 +320,8 @@ function writeLocalAppData(data: SharedAppData) {
 }
 
 export function SharedAppStateProvider({ children }: { children: ReactNode }) {
+  const { t } = useLanguage()
+
   const [state, setState] = useState<SharedAppData>(emptyState)
   const [localReady, setLocalReady] = useState(false)
   const [cloudReady, setCloudReady] = useState(!supabase)
@@ -553,8 +581,7 @@ export function SharedAppStateProvider({ children }: { children: ReactNode }) {
   if (!localReady || (supabase && !cloudReady)) {
     return (
       <main className="flex min-h-dvh items-center justify-center px-5 text-sm font-semibold text-zinc-500" aria-live="polite">
-        Eşitleme hazırlanıyor…
-      </main>
+        {t("Eşitleme hazırlanıyor…")}</main>
     )
   }
 
@@ -562,7 +589,7 @@ export function SharedAppStateProvider({ children }: { children: ReactNode }) {
     <SharedAppStateContext.Provider value={contextValue}>
       {syncStatus === 'offline' && syncError && (
         <p role="status" className="fixed left-1/2 top-2 z-[60] max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-full border border-zinc-200 bg-white/95 px-3 py-1.5 text-center text-[11px] font-semibold text-zinc-600 shadow-sm">
-          Eşitleme bekliyor: {syncError}
+          {t("Eşitleme bekliyor:")}{t(syncError)}
         </p>
       )}
       {children}
@@ -579,13 +606,24 @@ export function useSharedAppState() {
 export function useSharedBucketList() {
   const { state, updateSharedState } = useSharedAppState()
   const done = useMemo(() => new Set(state.done), [state.done])
+  const custom = useMemo(() => [...state.custom, ...calendarPlaceItems(state.calendarEvents)], [state.custom, state.calendarEvents])
+  const linkedCalendarIds = useMemo(() => new Set(calendarPlaceItems(state.calendarEvents).map((item) => item.id)), [state.calendarEvents])
 
   return {
     done,
-    custom: state.custom,
+    custom,
+    linkedCalendarIds,
     toggle: (id: string) => {
       const next = done.has(id) ? state.done.filter((item) => item !== id) : [...state.done, id]
-      updateSharedState({ done: next })
+      const linkedPlace = state.calendarEvents.find((event) => event.kind === 'place' && calendarPlaceItemId(event.id) === id)
+      if (linkedPlace && !done.has(id)) {
+        // Keep the completed task, but remove its now-finished calendar date atomically.
+        updateSharedState({
+          done: next,
+          custom: [...state.custom.filter((item) => item.id !== id), { id, category: 'places', text: linkedPlace.title }],
+          calendarEvents: state.calendarEvents.filter((event) => event.id !== linkedPlace.id),
+        })
+      } else updateSharedState({ done: next })
     },
     add: (category: ActiveCategoryId, text: string) => {
       const trimmed = text.trim().slice(0, 80)
@@ -599,6 +637,8 @@ export function useSharedBucketList() {
       updateSharedState({
         done: state.done.filter((item) => !idsToRemove.has(item)),
         custom: state.custom.filter((item) => !idsToRemove.has(item.id)),
+        calendarEvents: state.calendarEvents.filter((event) =>
+          !(event.kind === 'place' && idsToRemove.has(calendarPlaceItemId(event.id)))),
       })
     },
   }

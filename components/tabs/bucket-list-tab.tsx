@@ -1,8 +1,12 @@
 'use client'
 
+import { useLanguage } from '@/lib/language'
+import { DraggableTabList } from '@/components/draggable-tab-list'
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
+  CalendarDays,
   Clapperboard,
   Gamepad2,
   LayoutGrid,
@@ -13,6 +17,7 @@ import {
   Tv,
   UtensilsCrossed,
 } from 'lucide-react'
+import { ProgressSummary } from '@/components/progress-summary'
 import { SectionHeader } from '@/components/section-header'
 import { categories, type ActiveCategoryId } from '@/lib/bucket-list'
 import { useSharedBucketList } from '@/lib/shared-app-state'
@@ -41,7 +46,9 @@ type PendingDeletion = { ids: string[]; category: ActiveCategoryId }
 const rowExitDuration = 360
 
 export function BucketListTab() {
-  const { done, custom, toggle, add, remove } = useSharedBucketList()
+  const { t } = useLanguage()
+
+  const { done, custom, linkedCalendarIds, toggle, add, remove } = useSharedBucketList()
   const [filter, setFilter] = useState<Filter>('all')
   const [editingCategory, setEditingCategory] = useState<ActiveCategoryId | null>(null)
   const [selectedForDeletion, setSelectedForDeletion] = useState<string[]>([])
@@ -107,45 +114,21 @@ export function BucketListTab() {
 
   const selectedIds = useMemo(() => new Set(selectedForDeletion), [selectedForDeletion])
   const deletingIds = useMemo(() => new Set(pendingDeletion?.ids ?? []), [pendingDeletion])
-  const percent = totalCount ? Math.round((doneCount / totalCount) * 100) : 0
   const visible = filter === 'all' ? groups : groups.filter((g) => g.id === filter)
 
   return (
     <div>
-      <SectionHeader title="Yapılacaklar" largeTitle />
+      <SectionHeader title={t("Yapılacaklar")} largeTitle />
 
-      <section
-        aria-label="Genel ilerleme"
-        className="mb-5 rounded-3xl bg-foreground p-5 text-background shadow-[0_14px_30px_-16px_oklch(0.18_0_0/0.5)]"
-      >
-        <div className="flex items-end justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] opacity-70">Tamamlanan</p>
-            <p className="mt-1 text-3xl font-extrabold tabular-nums">
-              {doneCount}
-              <span className="text-lg font-semibold opacity-60">{` / ${totalCount}`}</span>
-            </p>
-          </div>
-          <p className="text-4xl font-extrabold tabular-nums text-primary">{`%${percent}`}</p>
-        </div>
-        <div
-          role="progressbar"
-          aria-valuenow={percent}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label="Tamamlanma oranı"
-          className="mt-4 h-2.5 overflow-hidden rounded-full bg-background/15"
-        >
-          <div className="h-full rounded-full bg-primary transition-[width] duration-500 ease-[var(--motion-ease)]" style={{ width: `${percent}%` }} />
-        </div>
-      </section>
+      <ProgressSummary label="Tamamlanan" completed={doneCount} total={totalCount} />
 
-      <div
+      <DraggableTabList
+        onSelect={index => changeFilter(index === 0 ? 'all' : groups[index - 1].id)}
         role="group"
         aria-label="Kategoriler"
-        className="mx-auto mb-5 flex w-full max-w-md items-center gap-1 rounded-full border border-border/70 bg-card p-1.5 shadow-[0_12px_28px_-22px_rgba(15,23,42,0.5)]"
+        className="mx-auto mb-5 flex w-full max-w-md items-center gap-1 rounded-full border p-1.5"
       >
-        <FilterChip active={filter === 'all'} onClick={() => changeFilter('all')} icon={LayoutGrid} label="Tümü" />
+        <FilterChip active={filter === 'all'} onClick={() => changeFilter('all')} icon={LayoutGrid} label={t("Tümü")} />
         {groups.map((g) => (
           <FilterChip
             key={g.id}
@@ -157,7 +140,7 @@ export function BucketListTab() {
             count={`${g.doneCount}/${g.items.length}`}
           />
         ))}
-      </div>
+      </DraggableTabList>
 
       <div className="flex flex-col gap-5">
         {visible.map((group) => {
@@ -169,7 +152,7 @@ export function BucketListTab() {
                   <Icon className="size-5" aria-hidden="true" />
                 </span>
                 <h2 id={`cat-${group.id}`} className="flex-1 text-base font-extrabold text-foreground">
-                  {group.label}
+                  {t(group.label)}
                 </h2>
                 <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-bold tabular-nums text-muted-foreground">
                   {`${group.doneCount}/${group.items.length}`}
@@ -191,18 +174,20 @@ export function BucketListTab() {
                       )}
                     >
                       <div className="flex min-h-0 items-center gap-1 overflow-hidden">
-                      <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 py-2">
+                      <label className={cn('flex min-h-11 min-w-0 flex-1 items-center gap-3 py-2', editingCategory !== null || pendingDeletion !== null ? 'cursor-default' : 'cursor-pointer')}>
                         <input
                           type="checkbox"
                           checked={isDone}
-                          onChange={() => toggle(item.id)}
-                          disabled={isDeleting}
+                          onChange={() => {
+                            if (editingCategory === null && pendingDeletion === null && !isDeleting) toggle(item.id)
+                          }}
+                          disabled={editingCategory !== null || pendingDeletion !== null || isDeleting}
                           className="peer sr-only"
                         />
                         <span
                           aria-hidden="true"
                           className={cn(
-                            'flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-[color,background-color,border-color,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)] peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-card',
+                            'flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-[color,background-color,border-color,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)] peer-disabled:opacity-40 peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-card',
                             isDone ? 'border-primary bg-primary text-primary-foreground' : 'border-border'
                           )}
                         >
@@ -218,6 +203,9 @@ export function BucketListTab() {
                           )}
                         >
                           {item.text}
+                          {linkedCalendarIds?.has(item.id) && (
+                            <CalendarDays className="ml-1.5 inline size-3 text-primary" aria-label={t('Takvimle bağlantılı')} />
+                          )}
                         </span>
                       </label>
                       {item.custom && (
@@ -239,7 +227,7 @@ export function BucketListTab() {
                                   : [...selected, item.id]
                               )
                             }}
-                            aria-label={`${item.text} maddesini silmek için seç`}
+                            aria-label={t("{text} maddesini silmek için seç", { text: item.text })}
                             className="peer sr-only"
                           />
                           <span
@@ -264,13 +252,9 @@ export function BucketListTab() {
                 })}
               </ul>
 
-              {editingCategory === group.id && (
-                <p className="mt-2 text-xs text-muted-foreground" role="status">
-                  Silmek istediklerini işaretle, sonra çöp kutusuna dokun.
-                </p>
-              )}
-              <AddItemForm
-                label={group.label}
+                <AddItemForm
+                  category={group.id}
+                label={t(group.label)}
                 onAdd={(text) => add(group.id, text)}
                 canEdit={
                   group.customCount > 0 &&
@@ -319,13 +303,15 @@ function FilterChip({
   shortLabel?: string
   count?: string
 }) {
+  const { t } = useLanguage()
+
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      aria-label={count ? `${label} ${count}` : label}
-      title={label}
+      aria-label={count ? `${t(label)} ${count}` : t(label)}
+      title={t(label)}
       className={cn(
         'group relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full px-0.5 py-2 text-[9px] font-semibold transition-[color,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)] active:scale-95 sm:text-[10px]',
         active
@@ -333,13 +319,6 @@ function FilterChip({
           : 'scale-[0.94] text-muted-foreground hover:text-foreground'
       )}
     >
-      <span
-        aria-hidden="true"
-        className={cn(
-          'absolute inset-0 rounded-full bg-gradient-to-br from-card to-secondary/70 shadow-[0_8px_16px_-12px_rgba(24,24,27,0.4)] transition-opacity duration-[var(--motion-duration)] ease-[var(--motion-ease)]',
-          active ? 'opacity-100' : 'opacity-0'
-        )}
-      />
       <span className={cn(
         'relative flex flex-col items-center gap-0.5 transition-[opacity,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)]',
         active ? 'scale-105' : 'scale-90 opacity-80'
@@ -351,7 +330,7 @@ function FilterChip({
           strokeWidth={active ? 1.8 : 2}
         />
         <span className={cn('max-w-full truncate leading-none transition-colors duration-[var(--motion-duration)] ease-[var(--motion-ease)]', active ? 'font-bold text-foreground' : 'font-medium')}>
-          {shortLabel ?? label}
+          {t(shortLabel ?? label)}
         </span>
         {count && <span className="text-[9px] leading-none tabular-nums opacity-60">{count}</span>}
       </span>
@@ -360,6 +339,7 @@ function FilterChip({
 }
 
 function AddItemForm({
+  category,
   label,
   onAdd,
   canEdit,
@@ -368,6 +348,7 @@ function AddItemForm({
   isDeleting,
   onEditAction,
 }: {
+  category: ActiveCategoryId
   label: string
   onAdd: (text: string) => void
   canEdit: boolean
@@ -376,6 +357,8 @@ function AddItemForm({
   isDeleting: boolean
   onEditAction: () => void
 }) {
+  const { t } = useLanguage()
+
   const [text, setText] = useState('')
 
   return (
@@ -388,7 +371,7 @@ function AddItemForm({
       }}
       className="mt-3 flex items-center gap-2"
     >
-      <label className="sr-only" htmlFor={`add-${label}`}>{`${label} listesine ekle`}</label>
+      <label className="sr-only" htmlFor={`add-${label}`}>{t("{category} listesine ekle", { category: t(label) })}</label>
       <input
         id={`add-${label}`}
         value={text}
@@ -397,13 +380,13 @@ function AddItemForm({
           if (e.key === 'Enter' && (e.nativeEvent.isComposing || e.keyCode === 229)) e.preventDefault()
         }}
         maxLength={80}
-        placeholder={isEditing ? 'Silinecek maddeleri seç...' : 'Kendi planını ekle...'}
+        placeholder={isEditing ? t("Silinecek maddeleri seç...") : t("{category} ekle...", { category: t(shortLabels[category]) })}
         disabled={isEditing}
         className="h-10 min-w-0 flex-1 rounded-full border border-border bg-background px-4 text-sm text-foreground transition-[border-color,opacity] duration-[var(--motion-duration)] ease-[var(--motion-ease)] placeholder:text-muted-foreground focus:border-primary focus:outline-none disabled:opacity-60"
       />
       <button
         type="submit"
-        aria-label="Ekle"
+        aria-label={t("Ekle")}
         disabled={!text.trim() || isEditing}
         className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-[opacity,transform] duration-[var(--motion-duration)] ease-[var(--motion-ease)] active:scale-95 disabled:opacity-40"
       >
@@ -414,17 +397,17 @@ function AddItemForm({
         onClick={onEditAction}
         aria-label={
           !isEditing
-            ? 'Maddeleri düzenle'
+            ? t("Maddeleri düzenle")
             : selectedCount > 0
-              ? `Seçilen ${selectedCount} maddeyi sil`
-              : 'Düzenlemeyi bitir'
+              ? t("Seçilen {count} maddeyi sil", { count: selectedCount })
+              : t("Düzenlemeyi bitir")
         }
         title={
           !isEditing
-            ? 'Maddeleri düzenle'
+            ? t("Maddeleri düzenle")
             : selectedCount > 0
-              ? `Seçilen ${selectedCount} maddeyi sil`
-              : 'Düzenlemeyi bitir'
+              ? t("Seçilen {count} maddeyi sil", { count: selectedCount })
+              : t("Düzenlemeyi bitir")
         }
         disabled={isDeleting || (!canEdit && !isEditing)}
         aria-busy={isDeleting || undefined}

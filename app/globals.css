@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
@@ -79,8 +80,17 @@
 :root {
   --motion-duration: 240ms;
   --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --login-viewport-height: 100svh;
+  --app-viewport-height: 100vh;
+  --login-viewport-height: 100%;
   --login-card-translate: 0px;
+  --app-backdrop-color: #fff4f8;
+  --app-backdrop-image:
+    linear-gradient(180deg, #fff4f8 0px, #fff4f8 96px, transparent 220px),
+    linear-gradient(0deg, #fff4f8 0px, #fff4f8 max(env(safe-area-inset-bottom, 0px), 24px), transparent calc(max(env(safe-area-inset-bottom, 0px), 24px) + 140px)),
+    radial-gradient(125% 52% at 50% -8%, rgba(244, 114, 182, 0.2) 0%, rgba(244, 114, 182, 0.105) 30%, rgba(244, 114, 182, 0.04) 58%, transparent 76%),
+    radial-gradient(58% 32% at 100% 0%, rgba(147, 197, 253, 0.2) 0%, transparent 72%),
+    radial-gradient(90% 40% at 100% 100%, rgba(212, 212, 216, 0.15) 0%, rgba(212, 212, 216, 0.06) 48%, transparent 100%),
+    linear-gradient(#fbf8fa, #fbf8fa);
   color-scheme: light;
   --background: oklch(0.98 0.003 260);
   --foreground: oklch(0.17 0.01 260);
@@ -103,50 +113,32 @@
   --radius: 0.75rem;
 }
 
+/* Keep single-finger scrolling, but exclude browser pinch zoom, including dialogs. */
+html, body, body * {
+  touch-action: pan-x pan-y;
+}
+
 .login-screen {
-  position: relative;
+  position: fixed;
+  inset: 0;
   height: var(--login-viewport-height);
   min-height: var(--login-viewport-height);
 }
 
 :root[data-login-locked='true'],
 :root[data-login-locked='true'] body {
-  height: var(--login-viewport-height);
   overflow: hidden;
   overscroll-behavior: none;
 }
 
-:root[data-login-locked='true'] body {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-}
-
 .login-card {
   transform: translate3d(0, var(--login-card-translate), 0);
-  transition: transform 360ms var(--motion-ease);
+  transition: transform 220ms var(--motion-ease);
   will-change: transform;
 }
 
 /* The light theme uses the same layered, floating depth as the dark theme,
    with a dark contact shadow instead of the dark theme's pale highlight. */
-.bottom-nav-panel {
-  border-color: rgb(39 39 42 / 0.16);
-  background: linear-gradient(180deg, rgb(255 255 255 / 0.96), rgb(237 238 242 / 0.94));
-  box-shadow:
-    0 20px 38px -23px rgb(24 24 27 / 0.58),
-    0 5px 12px -8px rgb(24 24 27 / 0.28),
-    inset 0 1px 0 rgb(255 255 255 / 0.98),
-    inset 0 -1px 0 rgb(24 24 27 / 0.07);
-}
-
-.bottom-nav-active {
-  background: linear-gradient(135deg, rgb(255 255 255 / 0.98), rgb(252 232 240 / 0.94) 52%, rgb(255 255 255 / 0.88));
-  box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.98),
-    0 10px 20px -16px rgb(24 24 27 / 0.55);
-}
-
 :root:not([data-theme='dark']) .surface-panel {
   border-color: rgb(39 39 42 / 0.11);
   background-color: rgb(255 255 255 / 0.9);
@@ -155,12 +147,137 @@
     inset 0 1px 0 rgb(255 255 255 / 0.92);
 }
 
-html,
-body {
-  min-height: 100%;
+@supports (height: 100dvh) {
+  :root { --app-viewport-height: 100dvh; }
 }
 
-/* Animate only paint/compositor properties; keep layout stable during interaction. */
+/* iOS standalone's percentage/visual viewport can omit the translucent
+   status bar. vh includes the complete display, including both safe areas. */
+@media (display-mode: standalone) {
+  :root { --app-viewport-height: 100vh; }
+}
+
+html,
+body {
+  min-height: var(--app-viewport-height);
+  background-color: var(--app-backdrop-color);
+  height: var(--app-viewport-height);
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* Scroll content, not the document. The navigation never belongs to that track. */
+.app-shell {
+  position: absolute !important;
+  inset: 0 0 auto;
+  height: var(--app-viewport-height);
+  min-height: 0 !important;
+  overflow: hidden;
+}
+.app-content {
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: none;
+}
+/* Keep touch/keyboard scrolling while hiding the website-like scroll indicator. */
+* { scrollbar-width: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+body {
+  position: relative;
+  isolation: isolate;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Keep native editing, selection and paste available in form fields. */
+body :where(input, textarea, [contenteditable]:not([contenteditable='false'])),
+body :where([contenteditable]:not([contenteditable='false'])) * {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* The document never scrolls. Size its canvas from the same full-height root
+   as the shell instead of iOS's shortened fixed-position viewport. */
+body::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  height: var(--app-viewport-height);
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--app-backdrop-color);
+  background-image: var(--app-backdrop-image);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+/* Keep the backdrop/decorations below content in iOS compositing. */
+.app-shell,
+.login-screen {
+  isolation: isolate;
+}
+.app-shell > main,
+.login-card {
+  position: relative;
+  z-index: 1;
+}
+.app-shell > [aria-hidden='true'],
+.login-screen > [aria-hidden='true'] {
+  z-index: 0;
+}
+
+/* All screens share one clear foreground. Keep the soft background canvas,
+   not WebKit backdrop-filter layers composited across headings and icons. */
+.app-content [class*='backdrop-blur'] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.app-content :is(h1, h2, h3, .font-script, svg) {
+  filter: none !important;
+}
+
+/* Sade seçili alan; kaydırma davranışı korunur, optik efekt kullanılmaz. */
+.bottom-nav-dock {
+  position: absolute;
+  /* Keep the pill directly above the Home indicator, like native iOS apps. */
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.75rem);
+}
+.drag-tab-list { position: relative; isolation: isolate; touch-action: pan-y; }
+.plain-tab-panel {
+  border-color: rgb(39 39 42 / 0.16);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.96), rgb(237 238 242 / 0.94));
+  box-shadow: 0 20px 38px -23px rgb(24 24 27 / 0.58), inset 0 1px 0 rgb(255 255 255 / 0.98);
+}
+:root[data-theme='dark'] .plain-tab-panel {
+  border-color: #383838;
+  background: linear-gradient(180deg, rgba(28, 28, 28, 0.96), rgba(15, 15, 15, 0.98));
+  box-shadow: 0 18px 40px -22px rgba(15, 23, 42, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+.drag-tab-list > button { z-index: 1; }
+.drag-tab-list > button:is([aria-selected='true'], [aria-pressed='true']) { touch-action: none; }
+.drag-tab-indicator {
+  position: absolute;
+  left: 0;
+  z-index: 0;
+  border-radius: 9999px;
+  pointer-events: none;
+  transform: translate3d(var(--glass-x, 0px), 0, 0);
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.98), rgb(252 232 240 / 0.94) 52%, rgb(255 255 255 / 0.88));
+  box-shadow: inset 0 1px 1px rgb(255 255 255 / 0.98), 0 10px 20px -16px rgb(24 24 27 / 0.55);
+  transition: transform 240ms var(--motion-ease), width 240ms var(--motion-ease), height 240ms var(--motion-ease), top 240ms var(--motion-ease);
+}
+:root[data-theme='dark'] .drag-tab-indicator {
+  background: linear-gradient(135deg, rgba(35, 35, 35, 0.96), rgba(244, 114, 182, 0.1), rgba(18, 18, 18, 0.92));
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.96), 0 12px 24px -18px rgba(24, 24, 27, 0.6);
+}
+.drag-tab-list[data-dragging='true'] .drag-tab-indicator,
+.drag-tab-list:not([data-glass-ready='true']) .drag-tab-indicator { transition: none; }
+.drag-tab-list[data-dragging='true'] > button[data-drag-preview='true'] { color: var(--foreground); }
+
 :where(button, a, input, select, textarea, .date-field, [role='tab']) {
   transition-duration: var(--motion-duration);
   transition-timing-function: var(--motion-ease);
@@ -196,16 +313,9 @@ body {
   transform: scale(0.92);
 }
 
-.letter-burst-heart {
-  opacity: 0;
-  animation: letter-heart-burst 1800ms var(--motion-ease) both;
-}
 
-@keyframes letter-heart-burst {
-  0% { opacity: 0; transform: translate3d(0, 18px, 0) scale(0.55) rotate(-8deg); }
-  18% { opacity: 0.9; }
-  100% { opacity: 0; transform: translate3d(0, -180px, 0) scale(1.15) rotate(12deg); }
-}
+
+
 
 .date-field {
   transition-property: border-color, box-shadow, background-color;
@@ -251,6 +361,9 @@ body {
 .tab-view {
   animation: tab-enter 300ms var(--motion-ease);
 }
+.settings-view {
+  animation: settings-enter 420ms var(--motion-ease) both;
+}
 
 @keyframes panel-enter {
   from { opacity: 0; transform: translate3d(0, -8px, 0) scale(0.96); }
@@ -272,6 +385,10 @@ body {
   from { opacity: 0; transform: translate3d(0, 8px, 0); }
   to { opacity: 1; transform: none; }
 }
+@keyframes settings-enter {
+  from { opacity: 0; transform: translate3d(18px, 12px, 0) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
 
 :root[data-theme='dark'] {
   color-scheme: dark;
@@ -290,6 +407,14 @@ body {
   --accent-foreground: #f5f5f5;
   --border: #383838;
   --input: #383838;
+  --app-backdrop-color: #190d15;
+  --app-backdrop-image:
+    linear-gradient(180deg, #190d15 0px, #190d15 96px, transparent 220px),
+    linear-gradient(0deg, #190d15 0px, #190d15 max(env(safe-area-inset-bottom, 0px), 24px), transparent calc(max(env(safe-area-inset-bottom, 0px), 24px) + 140px)),
+    radial-gradient(125% 52% at 50% -8%, rgba(244, 114, 182, 0.18) 0%, rgba(244, 114, 182, 0.09) 30%, rgba(244, 114, 182, 0.035) 54%, transparent 74%),
+    radial-gradient(58% 32% at 100% 0%, rgba(96, 165, 250, 0.13) 0%, transparent 72%),
+    radial-gradient(90% 40% at 100% 100%, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0.012) 50%, transparent 100%),
+    linear-gradient(#080808, #080808);
 }
 
 @layer base {
@@ -298,13 +423,8 @@ body {
   }
   body {
     @apply bg-background text-foreground font-sans;
-    background:
-      radial-gradient(circle at top, rgba(244, 114, 182, 0.06), transparent 24%),
-      radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.8), transparent 28%),
-      linear-gradient(180deg, rgba(255,255,255,0.7), rgba(248,248,250,0.9) 28%, rgba(245,245,247,1) 100%);
-  }
-  :root[data-theme='dark'] body {
-    background: #080808;
+    min-height: 100dvh;
+    background-color: var(--app-backdrop-color);
   }
 }
 
@@ -315,39 +435,14 @@ body {
     background-color: rgb(255 255 255 / 0.84);
     box-shadow: 0 18px 35px -24px rgb(24 24 27 / 0.24);
   }
-  .app-shell {
-    /* Keep an opaque base behind the glow: transparent gradient layers over
-       body gradients can otherwise form a visible horizontal seam on iOS. */
-    background-color: var(--background);
-    background-image:
-      radial-gradient(125% 52% at 50% -8%, rgba(244, 114, 182, 0.15) 0%, rgba(244, 114, 182, 0.1) 28%, rgba(244, 114, 182, 0.045) 50%, rgba(244, 114, 182, 0.012) 70%, transparent 100%),
-      radial-gradient(90% 40% at 100% 100%, rgba(212, 212, 216, 0.15) 0%, rgba(212, 212, 216, 0.06) 48%, transparent 100%);
-    background-repeat: no-repeat;
+  .app-backdrop {
+    background: transparent;
   }
 }
 
 :root[data-theme='dark'] .surface-panel {
   border-color: #383838;
   background-color: rgb(20 20 20 / 0.9);
-}
-
-:root[data-theme='dark'] .app-shell {
-  background-color: #080808;
-  background-image:
-    radial-gradient(125% 52% at 50% -8%, rgba(244, 114, 182, 0.12) 0%, rgba(244, 114, 182, 0.075) 30%, rgba(244, 114, 182, 0.03) 54%, rgba(244, 114, 182, 0.008) 74%, transparent 100%),
-    radial-gradient(90% 40% at 100% 100%, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0.012) 50%, transparent 100%);
-}
-
-/* Preserve the existing dark navigation treatment exactly. */
-:root[data-theme='dark'] .bottom-nav-panel {
-  border-color: #383838;
-  background: linear-gradient(180deg, rgba(28, 28, 28, 0.96), rgba(15, 15, 15, 0.98));
-  box-shadow: 0 18px 40px -22px rgba(15, 23, 42, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.92);
-}
-
-:root[data-theme='dark'] .bottom-nav-active {
-  background: linear-gradient(135deg, rgba(35, 35, 35, 0.96), rgba(244, 114, 182, 0.1), rgba(18, 18, 18, 0.92));
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.96), 0 12px 24px -18px rgba(24, 24, 27, 0.6);
 }
 
 
@@ -456,5 +551,5 @@ body {
 input,
 textarea,
 select {
-  font-size: 16px !important;
+  font-size: max(16px, 1rem) !important;
 }

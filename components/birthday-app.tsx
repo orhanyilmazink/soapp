@@ -1,12 +1,16 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useLanguage } from '@/lib/language'
+import { restoreLoginViewport } from '@/lib/login-viewport'
+
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Heart, ScanFace } from 'lucide-react'
+import { ScanFace } from 'lucide-react'
 import Image from 'next/image'
 import { BottomNav, type TabId } from '@/components/bottom-nav'
 import { FloatingHearts } from '@/components/floating-hearts'
-import { HomeTab, type AppTheme } from '@/components/tabs/home-tab'
+import type { AppTheme } from '@/components/tabs/settings-tab'
+import { HomeTab } from '@/components/tabs/home-tab'
 import { SharedAppStateProvider } from '@/lib/shared-app-state'
 
 const CalendarTab = dynamic(
@@ -21,13 +25,19 @@ const BucketListTab = dynamic(
   () => import('@/components/tabs/bucket-list-tab').then((module) => module.BucketListTab),
   { loading: () => <TabLoading /> }
 )
-const LetterTab = dynamic(
-  () => import('@/components/tabs/letter-tab').then((module) => module.LetterTab),
+const WishlistTab = dynamic(
+  () => import('@/components/tabs/wishlist-tab').then((module) => module.WishlistTab),
+  { loading: () => <TabLoading /> }
+)
+const SettingsTab = dynamic(
+  () => import('@/components/tabs/settings-tab').then((module) => module.SettingsTab),
   { loading: () => <TabLoading /> }
 )
 
 function TabLoading() {
-  return <div aria-label="Yükleniyor" role="status" className="surface-panel h-80 animate-pulse" />
+  const { t } = useLanguage()
+
+  return <div aria-label={t("Yükleniyor")} role="status" className="surface-panel h-80 animate-pulse" />
 }
 
 const defaultAppPin = '0111'
@@ -38,6 +48,8 @@ const biometricCredentialKey = 'birthday-app-biometric-credential'
 const biometricPromptDismissedKey = 'birthday-app-biometric-prompt-dismissed'
 const themeStorageKey = 'soapp-theme'
 const maxBiometricAttempts = 2
+const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? 'v.0.1.0.0'
+const updateResumeKey = 'soapp-update-resume'
 
 function randomChallenge() {
   return crypto.getRandomValues(new Uint8Array(32))
@@ -57,6 +69,8 @@ function decodeCredentialId(encoded: string) {
 }
 
 export function BirthdayApp() {
+  const { t } = useLanguage()
+
   const [tab, setTab] = useState<TabId>('home')
   const [pin, setPin] = useState('')
   const [pinError, setPinError] = useState(false)
@@ -69,11 +83,29 @@ export function BirthdayApp() {
   const [biometricFailures, setBiometricFailures] = useState(0)
   const [pinSetupFailed, setPinSetupFailed] = useState(false)
   const [theme, setTheme] = useState<AppTheme>('light')
-  const [letterBurstKey, setLetterBurstKey] = useState(0)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [appPin, setAppPin] = useState<string | null>(defaultAppPin)
   const pinInputRef = useRef<HTMLInputElement>(null)
+  const loginCardRef = useRef<HTMLElement>(null)
+  const contentRef = useRef<HTMLElement>(null)
 
-  const showBiometricButton = hasBiometric && biometricFailures < maxBiometricAttempts
+  const showBiometricButton = !isReady || (hasBiometric && biometricFailures < maxBiometricAttempts)
+
+  useEffect(() => {
+    const preserveUpdateSession = (event: Event) => {
+      if (!isUnlocked || isBiometricBusy) return
+      try {
+        sessionStorage.setItem(updateResumeKey, JSON.stringify({
+          version: (event as CustomEvent<{ version: string }>).detail.version,
+          expiresAt: Date.now() + 30_000,
+          tab,
+          settingsOpen: isSettingsOpen,
+        }))
+      } catch {}
+    }
+    window.addEventListener('soapp:before-update', preserveUpdateSession)
+    return () => window.removeEventListener('soapp:before-update', preserveUpdateSession)
+  }, [isUnlocked, isBiometricBusy, tab, isSettingsOpen])
 
   useEffect(() => {
     const savedTheme = localStorage.getItem(themeStorageKey)
@@ -82,59 +114,142 @@ export function BirthdayApp() {
       ? 'dark'
       : 'light'
     document.documentElement.dataset.theme = nextTheme
+    // Reapply after hydration: iOS can restore Next's initial metadata after
+    // the early theme script, including while the PIN screen is still locked.
+    document.querySelectorAll('meta[name="theme-color"]').forEach(meta =>
+      meta.setAttribute('content', nextTheme === 'dark' ? '#190d15' : '#fff4f8')
+    )
     setTheme(nextTheme)
+
   }, [])
 
-  useEffect(() => {
-    if (isUnlocked) return
+  useLayoutEffect(() => {
+    if (isUnlocked) return restoreLoginViewport()
 
     const root = document.documentElement
-    const initialViewportHeight = window.innerHeight
-    // Keep the page fixed, then move only the card by a measured amount. This
-    // avoids iOS re-centering the whole page while still keeping the PIN field
-    // comfortably above the keyboard.
-    root.style.setProperty('--login-viewport-height', `${initialViewportHeight}px`)
-    root.dataset.loginLocked = 'true'
-    const positionLoginCard = () => {
-      const visualViewport = window.visualViewport
-      if (!visualViewport) return
-      const keyboardHeight = Math.max(0, initialViewportHeight - visualViewport.height - visualViewport.offsetTop)
-      const translation = keyboardHeight > 80
-        ? -Math.min(96, Math.max(48, Math.round(keyboardHeight * 0.28)))
-        : 0
-      root.style.setProperty('--login-card-translate', `${translation}px`)
-    }
+    const loginInput = pinInputRef.current
     const visualViewport = window.visualViewport
+    let lockedViewportHeight = Math.round(window.innerHeight)
+    let cardTranslation = 0
+    let restingCardBounds: { top: number; bottom: number } | null = null
+
+    // iOS does not resize the layout viewport consistently when its keyboard
+    // opens. Keep the login layout on its pre-keyboard height and position the
+    // card from the visual viewport instead of letting flexbox re-centre it.
+    const setLockedViewportHeight = (height: number) => {
+      lockedViewportHeight = Math.round(height)
+      root.style.setProperty('--login-viewport-height', `${lockedViewportHeight}px`)
+    }
+
+    const setCardTranslation = (translation: number) => {
+      cardTranslation = Math.round(translation)
+      root.style.setProperty('--login-card-translate', `${cardTranslation}px`)
+    }
+
+    root.dataset.loginLocked = 'true'
+
+    // Freeze geometry only when the user starts PIN entry. Startup viewport
+    // resize/scroll events must never feed a new height back into the page.
+    const beginPinEntry = () => {
+      const card = loginCardRef.current
+      if (!card) return
+      setLockedViewportHeight(card.parentElement?.getBoundingClientRect().height ?? window.innerHeight)
+      const bounds = card.getBoundingClientRect()
+      restingCardBounds = { top: bounds.top - cardTranslation, bottom: bounds.bottom - cardTranslation }
+    }
+    const endPinEntry = () => {
+      setCardTranslation(0)
+      root.style.removeProperty('--login-viewport-height')
+      restingCardBounds = null
+    }
+
+    const positionLoginCard = () => {
+      const card = loginCardRef.current
+      if (!visualViewport || !card || document.activeElement !== loginInput) return
+
+      const keyboardHeight = Math.max(
+        0,
+        lockedViewportHeight - visualViewport.height - visualViewport.offsetTop
+      )
+
+      if (keyboardHeight < 80) {
+        setCardTranslation(0)
+        return
+      }
+
+      if (!restingCardBounds) {
+        const cardBounds = card.getBoundingClientRect()
+        restingCardBounds = {
+          top: cardBounds.top - cardTranslation,
+          bottom: cardBounds.bottom - cardTranslation,
+        }
+      }
+
+      const { top: naturalCardTop, bottom: naturalCardBottom } = restingCardBounds
+      const keyboardGap = 24
+      const visibleBottom = visualViewport.height + visualViewport.offsetTop
+      const desiredTranslation = visibleBottom - keyboardGap - naturalCardBottom
+      // Keep the card visible even on unusually short landscape viewports.
+      const highestAllowedTranslation = 16 - naturalCardTop
+      setCardTranslation(Math.min(0, Math.max(highestAllowedTranslation, desiredTranslation)))
+    }
+
     visualViewport?.addEventListener('resize', positionLoginCard)
     visualViewport?.addEventListener('scroll', positionLoginCard)
+    window.addEventListener('resize', positionLoginCard)
+    loginInput?.addEventListener('focus', beginPinEntry)
+    loginInput?.addEventListener('blur', endPinEntry)
 
     return () => {
       visualViewport?.removeEventListener('resize', positionLoginCard)
       visualViewport?.removeEventListener('scroll', positionLoginCard)
+      window.removeEventListener('resize', positionLoginCard)
+      loginInput?.removeEventListener('focus', beginPinEntry)
+      loginInput?.removeEventListener('blur', endPinEntry)
       root.style.removeProperty('--login-viewport-height')
       root.style.removeProperty('--login-card-translate')
       delete root.dataset.loginLocked
+      // Explicitly dismiss the PIN keyboard before mounting fixed navigation.
+      loginInput?.blur()
     }
   }, [isUnlocked])
 
   const changeTheme = (nextTheme: AppTheme) => {
     localStorage.setItem(themeStorageKey, nextTheme)
     document.documentElement.dataset.theme = nextTheme
+    document.querySelectorAll('meta[name="theme-color"]').forEach(meta =>
+      meta.setAttribute('content', nextTheme === 'dark' ? '#190d15' : '#fff4f8')
+    )
     setTheme(nextTheme)
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let active = true
     const storedCredential = localStorage.getItem(biometricCredentialKey)
     const promptDismissed = localStorage.getItem(biometricPromptDismissedKey) === 'true'
     const pinDisabled = localStorage.getItem(pinDisabledStorageKey) === 'true'
     const storedPin = localStorage.getItem(appPinStorageKey)
     const activePin = pinDisabled ? null : (storedPin && /^\d{4}$/.test(storedPin) ? storedPin : defaultAppPin)
+    let resumeUpdate = false
+    try {
+      const saved = sessionStorage.getItem(updateResumeKey)
+      sessionStorage.removeItem(updateResumeKey)
+      const resume = saved ? JSON.parse(saved) : null
+      const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
+      if (navigation?.type === 'reload' && resume?.version === appVersion && resume.expiresAt > Date.now() &&
+        ['home', 'calendar', 'achievements', 'todo', 'wishlist'].includes(resume.tab)) {
+        resumeUpdate = true
+        setTab(resume.tab as TabId)
+        setIsSettingsOpen(resume.settingsOpen === true)
+      }
+    } catch {}
     setAppPin(activePin)
     setHasBiometric(Boolean(storedCredential))
     setIsUnlocked(
-      activePin === null || (localStorage.getItem(rememberedUnlockKey) === 'true' && !storedCredential && promptDismissed)
+      resumeUpdate || activePin === null || (localStorage.getItem(rememberedUnlockKey) === 'true' && !storedCredential && promptDismissed)
     )
+    // Local settings are ready now; authenticator discovery must not delay PIN entry.
+    setIsReady(true)
 
     const canCheckBiometrics =
       window.isSecureContext &&
@@ -195,7 +310,11 @@ export function BirthdayApp() {
   const focusPinInput = () => {
     const input = pinInputRef.current
     if (!input || input.disabled) return
-    input.focus()
+    try {
+      input.focus({ preventScroll: true })
+    } catch {
+      input.focus()
+    }
   }
 
   const rememberPinAndUnlock = () => {
@@ -321,35 +440,40 @@ export function BirthdayApp() {
   }
 
   const changeTab = (next: TabId) => {
-    if (next === tab) {
-      if (next === 'letter') setLetterBurstKey((key) => key + 1)
-      return
-    }
+    setIsSettingsOpen(false)
+    if (next === tab) return
     setTab(next)
-    if (next === 'letter') setLetterBurstKey((key) => key + 1)
-    window.scrollTo({ top: 0, behavior: 'instant' })
+    contentRef.current?.scrollTo({ top: 0, behavior: 'instant' })
+  }
+
+  const openSettings = () => {
+    setIsSettingsOpen(true)
+    contentRef.current?.scrollTo({ top: 0, behavior: 'instant' })
+  }
+
+  const closeSettings = () => {
+    setIsSettingsOpen(false)
+    contentRef.current?.scrollTo({ top: 0, behavior: 'instant' })
   }
 
   if (!isReady || !isUnlocked) {
     return (
-      <main className="login-screen flex items-center justify-center overflow-hidden overscroll-none bg-[radial-gradient(ellipse_at_top,rgba(244,114,182,0.1),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.9),rgba(245,245,247,1))] px-5">
+      <main aria-busy={isBiometricBusy} className="login-screen app-backdrop flex items-center justify-center overflow-hidden overscroll-none px-5">
         <FloatingHearts />
 
-        <section aria-labelledby="pin-title" className="login-card relative w-full max-w-sm rounded-3xl border border-white/80 bg-white/85 p-7 text-center shadow-[0_24px_70px_-34px_rgba(24,24,27,0.3)] backdrop-blur-xl sm:p-9">
+        <section ref={loginCardRef} aria-labelledby="pin-title" className="login-card relative w-full max-w-sm rounded-3xl border border-white/80 bg-white/85 p-7 text-center shadow-[0_24px_70px_-34px_rgba(24,24,27,0.3)] backdrop-blur-xl sm:p-9">
           <div className="mx-auto grid size-20 place-items-center rounded-full border border-pink-100 bg-pink-50">
             <Image src="/icon1.png" width={72} height={72} alt="" priority className="size-[4.5rem] object-contain" />
           </div>
           <p className="mt-5 text-sm font-black tracking-[0.2em] text-zinc-400">SOapp</p>
           <h1 id="pin-title" className="mt-2 text-2xl font-bold text-zinc-900">
-            {!isReady ? 'Açılıyor' : 'Hoş geldin'}
+            {t("Hoş geldin")}
           </h1>
-          {(!isReady || !hasBiometric) && (
+          {isReady && !hasBiometric && (
             <p className="mt-2 text-sm text-zinc-500">
-              {!isReady
-                ? 'Bir saniye...'
-                : canUseBiometric
-                  ? 'PIN’i ilk kez girdikten sonra Face ID açılacak.'
-                  : 'Dört haneli PIN kodunu gir.'}
+              {canUseBiometric
+                  ? t("PIN’i ilk kez girdikten sonra Face ID açılacak.")
+                  : t("Dört haneli PIN kodunu gir.")}
             </p>
           )}
 
@@ -357,15 +481,15 @@ export function BirthdayApp() {
             <button
               type="button"
               onClick={unlockWithBiometric}
-              disabled={isBiometricBusy}
-              className="mt-6 flex h-[60px] w-full items-center justify-center gap-2 rounded-2xl border-2 border-pink-200 bg-zinc-50 text-sm font-bold text-zinc-900 hover:bg-white focus:outline-none focus-visible:outline-none disabled:opacity-50"
+              disabled={!isReady || isBiometricBusy}
+              className={`mt-6 flex h-[60px] w-full items-center justify-center gap-2 rounded-2xl border-2 border-pink-200 bg-zinc-50 text-sm font-bold text-zinc-900 hover:bg-white focus:outline-none focus-visible:outline-none ${isBiometricBusy ? 'opacity-50' : ''}`}
             >
               <ScanFace className="size-5 text-pink-500" aria-hidden="true" />
-              {isBiometricBusy ? 'Doğrulanıyor…' : 'Face ID ile aç'}
+              {isBiometricBusy ? t("Doğrulanıyor…") : t("Face ID ile aç")}
             </button>
           )}
           <div className={showBiometricButton ? 'mt-3' : 'mt-6'}>
-            <label htmlFor="app-pin" className="sr-only">Dört haneli PIN kodu</label>
+            <label htmlFor="app-pin" className="sr-only">{t("Dört haneli PIN kodu")}</label>
             <div className={`${pinError ? 'pin-reject-animation ' : ''}h-[60px] rounded-2xl border-2 border-pink-200 bg-zinc-50 transition-colors focus-within:border-pink-400 focus-within:bg-white`}>
               <input
                 ref={pinInputRef}
@@ -379,7 +503,7 @@ export function BirthdayApp() {
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                disabled={isBiometricBusy}
+                disabled={!isReady || isBiometricBusy}
                 value={pin}
                 onPointerDown={focusPinInput}
                 onChange={(event) => {
@@ -397,11 +521,10 @@ export function BirthdayApp() {
             </div>
             {pinError && (
               <p id="pin-error" role="alert" className="mt-2 text-sm font-medium text-rose-500">
-                PIN hatalı. Tekrar dene.
-              </p>
+                {t("PIN hatalı. Tekrar dene.")}</p>
             )}
           </div>
-          {biometricError && <p role="alert" className="mt-3 text-sm font-medium text-rose-500">{biometricError}</p>}
+          {biometricError && <p role="alert" className="mt-3 text-sm font-medium text-rose-500">{t(biometricError)}</p>}
         </section>
       </main>
     )
@@ -409,17 +532,21 @@ export function BirthdayApp() {
 
   return (
     <SharedAppStateProvider>
-      <div className="app-shell relative min-h-dvh overflow-x-hidden">
-        <FloatingHearts letterBurstKey={letterBurstKey} />
+      <div aria-busy={isBiometricBusy} className="app-shell app-backdrop">
+        <FloatingHearts />
         <main
-          id={`panel-${tab}`}
+          ref={contentRef}
+          id={isSettingsOpen ? 'panel-settings' : `panel-${tab}`}
           role="tabpanel"
-          aria-labelledby={`tab-${tab}`}
-          className="relative mx-auto w-full max-w-md px-5 pt-[max(env(safe-area-inset-top),1.5rem)] pb-32"
+          aria-labelledby={isSettingsOpen ? undefined : `tab-${tab}`}
+          aria-label={isSettingsOpen ? t("Ayarlar") : undefined}
+          className={`app-content relative mx-auto w-full max-w-md px-5 pt-[calc(env(safe-area-inset-top,0px)+2rem)] ${isSettingsOpen ? 'pb-[calc(env(safe-area-inset-bottom,0px)+2rem)]' : 'pb-32'}`}
         >
-          <div key={tab} className="tab-view">
-            {tab === 'home' && (
-              <HomeTab
+          <div key={isSettingsOpen ? 'settings' : tab} className={isSettingsOpen ? 'settings-view' : 'tab-view'}>
+            {isSettingsOpen ? (
+              <SettingsTab
+                appVersion={appVersion}
+                onBack={closeSettings}
                 theme={theme}
                 onThemeChange={changeTheme}
                 faceIdEnabled={hasBiometric}
@@ -431,14 +558,17 @@ export function BirthdayApp() {
                 onPinChange={changeAppPin}
                 onPinRemove={removeAppPin}
               />
-            )}
-            {tab === 'calendar' && <CalendarTab />}
-            {tab === 'achievements' && <AchievementsTab />}
-            {tab === 'todo' && <BucketListTab />}
-            {tab === 'letter' && <LetterTab />}
+            ) : null}
+            {!isSettingsOpen && tab === 'home' ? (
+              <HomeTab onOpenSettings={openSettings} />
+            ) : null}
+            {!isSettingsOpen && tab === 'calendar' ? <CalendarTab /> : null}
+            {!isSettingsOpen && tab === 'achievements' ? <AchievementsTab /> : null}
+            {!isSettingsOpen && tab === 'todo' ? <BucketListTab /> : null}
+            {!isSettingsOpen && tab === 'wishlist' ? <WishlistTab /> : null}
           </div>
         </main>
-        <BottomNav active={tab} onChange={changeTab} />
+        {!isSettingsOpen ? <BottomNav active={tab} onChange={changeTab} /> : null}
       </div>
     </SharedAppStateProvider>
   )

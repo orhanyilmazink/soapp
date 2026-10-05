@@ -1,8 +1,11 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import Script from 'next/script'
 import { Dancing_Script, Nunito } from 'next/font/google'
 import { ServiceWorkerRegister } from '@/components/sw-register'
+import { AppUpdates } from '@/components/app-updates'
+import { PinchZoomLock } from '@/components/pinch-zoom-lock'
+import { LanguageProvider } from '@/lib/language'
+import { appIcons, appleAppIcon } from '@/lib/app-icons'
 import './globals.css'
 
 const nunito = Nunito({ subsets: ['latin', 'latin-ext'], variable: '--font-nunito' })
@@ -22,21 +25,21 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
   },
   icons: {
-    icon: [
-      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
-    ],
-    apple: [
-      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
-    ],
+    icon: appIcons.map(({ src, ...icon }) => ({ url: src, ...icon })),
+    apple: [appleAppIcon],
   },
 }
 
 export const viewport: Viewport = {
   colorScheme: 'light dark',
-  themeColor: '#1c1c1e',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#fff4f8' },
+    { media: '(prefers-color-scheme: dark)', color: '#190d15' },
+  ],
   width: 'device-width',
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: 'cover',
 }
 
@@ -48,6 +51,7 @@ const themeInitialization = `
       ? 'dark'
       : 'light'
     document.documentElement.dataset.theme = theme
+    document.querySelectorAll('meta[name="theme-color"]').forEach(meta => meta.setAttribute('content', theme === 'dark' ? '#190d15' : '#fff4f8'))
   } catch {}
 `
 
@@ -59,13 +63,18 @@ export default function RootLayout({
   return (
     <html lang="tr" className={`${nunito.variable} ${dancing.variable}`} suppressHydrationWarning>
       <head>
-        <Script id="theme-initialization" strategy="beforeInteractive">
-          {themeInitialization}
-        </Script>
+        {/* Next emits the generic capability tag; iOS also needs its legacy tag
+            to consistently apply the translucent status-bar configuration. */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        {/* Must run during HTML parsing, before the first themed paint.
+            A queued Next Script can otherwise leave the SSR login in light mode. */}
+        <script id="theme-initialization" dangerouslySetInnerHTML={{ __html: themeInitialization }} />
       </head>
       <body className="antialiased">
-        {children}
+        <PinchZoomLock />
+        <LanguageProvider>{children}</LanguageProvider>
         <ServiceWorkerRegister />
+        <AppUpdates />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

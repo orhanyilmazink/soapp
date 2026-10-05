@@ -1,5 +1,5 @@
-const CACHE = 'soapp-v6'
-const PRECACHE = ['/', '/icon-192.png', '/manifest.webmanifest']
+const CACHE = 'soapp-v9'
+const PRECACHE = ['/', '/icon-restored-192.png', '/icon-restored-512.png', '/icon-restored-180.png', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -88,8 +88,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title || 'SOapp', {
       body: payload.body || 'Buluşmana yaklaşıyorsun.',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
+      icon: '/icon-restored-192.png',
+      badge: '/icon-restored-192.png',
       data: { url: '/' },
     })
   )

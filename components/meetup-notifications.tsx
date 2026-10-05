@@ -1,5 +1,7 @@
 'use client'
 
+import { useLanguage } from '@/lib/language'
+
 import { useEffect, useState } from 'react'
 import { useSharedAppState, type PushSubscriptionRecord } from '@/lib/shared-app-state'
 
@@ -13,6 +15,8 @@ function base64UrlToUint8Array(value: string) {
 }
 
 export function MeetupNotificationsButton() {
+  const { t } = useLanguage()
+
   const { state, updateSharedState } = useSharedAppState()
   const [status, setStatus] = useState('')
   const [enabled, setEnabled] = useState(false)
@@ -92,23 +96,23 @@ export function MeetupNotificationsButton() {
     <section className="rounded-2xl border border-zinc-200 bg-white/80 p-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-zinc-800">Buluşma bildirimleri</p>
+          <p className="text-sm font-bold text-foreground">{t("Buluşma bildirimleri")}</p>
         </div>
       <button
         type="button"
         role="switch"
         aria-checked={enabled}
-        aria-label={`Buluşma bildirimleri ${enabled ? 'açık' : 'kapalı'}`}
+        aria-label={`${t('Buluşma bildirimleri')} ${enabled ? t("açık") : t("kapalı")}`}
         onClick={() => void (enabled ? disableNotifications() : enableNotifications())}
-        className={`flex h-8 w-[4.75rem] shrink-0 items-center justify-between rounded-full px-1 transition-colors ${enabled ? 'bg-pink-500' : 'bg-zinc-200'}`}
+        className={`flex h-8 w-[4.75rem] shrink-0 items-center justify-between rounded-full px-1 transition-colors ${enabled ? 'bg-primary' : 'bg-muted'}`}
       >
-        <span className="sr-only">Buluşma bildirimleri</span>
-        {enabled && <span className="ml-1 text-[10px] font-black text-white">Açık</span>}
-        <span className="size-6 rounded-full bg-white shadow-sm" />
-        {!enabled && <span className="mr-1 text-[10px] font-black text-zinc-600">Kapalı</span>}
+        <span className="sr-only">{t("Buluşma bildirimleri")}</span>
+        {enabled && <span className="ml-1 text-[10px] font-black text-primary-foreground">{t("Açık")}</span>}
+        <span className="size-6 rounded-full bg-card shadow-sm" />
+        {!enabled && <span className="mr-1 text-[10px] font-black text-muted-foreground">{t("Kapalı")}</span>}
       </button>
       </div>
-      {status && <p role="status" className="mt-2 text-center text-xs text-zinc-500">{status}</p>}
+      {status && <p role="status" className="mt-2 text-center text-xs text-zinc-500">{t(status)}</p>}
     </section>
   )
 }
