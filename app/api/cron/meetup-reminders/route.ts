@@ -7,7 +7,10 @@ const day = 24 * 60 * 60 * 1000
 type StoredSubscription = {
   endpoint: string
   expirationTime: number | null
-  keys: { auth: string; p256dh: string }
+  keys: {
+    auth: string
+    p256dh: string
+  }
 }
 
 type StoredState = {
@@ -105,7 +108,10 @@ function dueReminder(
     (meetupAtMidnight - todayAtMidnight) / day
   )
 
-  if (daysRemaining < 1) return null
+  // Buluşma günü veya buluşma geçmişse bildirim gönderme
+  if (daysRemaining < 1) {
+    return null
+  }
 
   return {
     label: `Buluşmamıza son ${daysRemaining} gün kaldı!`,
@@ -113,7 +119,7 @@ function dueReminder(
 }
 
 export async function GET(request: Request) {
-  // Cron isteğinin güvenlik kontrolü
+  // Supabase Cron isteğini doğrula
   if (
     request.headers.get('authorization') !==
     `Bearer ${process.env.CRON_SECRET}`
@@ -148,7 +154,7 @@ export async function GET(request: Request) {
     )
   }
 
-  // Supabase'den buluşma bilgilerini al
+  // Buluşma ve push aboneliklerini Supabase'den al
   const response = await fetch(
     `${supabaseUrl}/rest/v1/bucket_lists?id=eq.shared&select=state`,
     {
@@ -189,25 +195,54 @@ export async function GET(request: Request) {
 
   const now = new Date()
 
+  // Önce buluşmanın hâlâ gelecekte olduğunu kontrol et
+  const target = meetupTimeInUtc(
+    state.meetupDate,
+    state.meetupTime,
+    timeZone
+  )
+
+  if (!target) {
+    return Response.json({
+      sent: 0,
+      reason: 'Invalid meetup time',
+    })
+  }
+
+  if (target <= now.getTime()) {
+    return Response.json({
+      sent: 0,
+      reason: 'Meetup has passed',
+    })
+  }
+
   /*
-   * KRİTİK KISIM
-   *
-   * Cron her dakika çalışabilir.
-   * Ancak sadece buluşmanın seçilen
-   * saat + dakikasında bildirim gönderilir.
+   * Supabase Cron her dakika endpoint'i çağırır.
+   * Bildirim yalnızca kullanıcının seçtiği
+   * buluşma saat ve dakikasında gönderilir.
    *
    * Örnek:
    * meetupTime = 11:30
    *
-   * 11:29 -> gönderme
-   * 11:30 -> gönder
-   * 11:31 -> gönderme
+   * 11:29 -> göndermez
+   * 11:30 -> gönderir
+   * 11:31 -> göndermez
    */
 
   const currentParts = dateParts(now, timeZone)
 
   const [meetupHour, meetupMinute] =
     state.meetupTime.split(':').map(Number)
+
+  if (
+    !Number.isFinite(meetupHour) ||
+    !Number.isFinite(meetupMinute)
+  ) {
+    return Response.json({
+      sent: 0,
+      reason: 'Invalid meetup time',
+    })
+  }
 
   const currentHour = Number(currentParts.hour)
   const currentMinute = Number(currentParts.minute)
@@ -224,31 +259,10 @@ export async function GET(request: Request) {
     })
   }
 
-  // Buluşma geçmiş mi?
-  const target = meetupTimeInUtc(
-    state.meetupDate,
-    state.meetupTime,
-    timeZone
-  )
-
-  if (!target) {
-    return Response.json({
-      sent: 0,
-      reason: 'Invalid meetup time',
-    })
-  }
-
-  if (target <= Date.now()) {
-    return Response.json({
-      sent: 0,
-      reason: 'Meetup has passed',
-    })
-  }
-
   // Kaç gün kaldığını hesapla
   const reminder = dueReminder(
     state.meetupDate,
-    Date.now(),
+    now.getTime(),
     timeZone
   )
 
