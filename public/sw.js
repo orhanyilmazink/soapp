@@ -1,5 +1,5 @@
-const CACHE = 'soapp-v10'
-const PRECACHE = ['/', '/icon-macos-192.png', '/icon-macos-512.png', '/icon-restored-192.png', '/icon-restored-180.png', '/manifest.webmanifest']
+const CACHE = 'soapp-v11'
+const PRECACHE = ['/', '/icon-restored-192.png', '/icon-restored-512.png', '/icon-restored-180.png', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

@@ -1,10 +1,8 @@
 {
   "version": "0.1.0",
-  "revision": 33,
-  "publishedAt": "2026-10-07T14:18:46.000Z",
+  "revision": 34,
+  "publishedAt": "2026-10-07T14:30:50.000Z",
   "changes": [
-    "Yapılacaklar ve Başarımlar kategori navigasyonları alt menüyle aynı cam görünümüne uyarlandı.",
-    "Takvim etkinlikleri için 14, 7 ve 1 gün kala gönderilen bildirimler Ayarlar’a eklendi.",
-    "İstekler sekmesi sepet simgesiyle ve Mac uygulama ikonu koyu zeminle güncellendi."
+    "iPhone ana ekran ikonu önceki çalışan SOapp kalp logosuna geri döndürüldü."
   ]
 }
