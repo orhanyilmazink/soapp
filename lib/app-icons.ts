@@ -5,7 +5,9 @@ export const appIcons = [
 ]
 
 export const appleAppIcon = {
-  url: '/icon-restored-180.png',
+  // Use Apple's conventional filename and rev the URL whenever the artwork
+  // changes; iOS otherwise keeps a stale home-screen icon very aggressively.
+  url: '/apple-touch-icon.png?v=35',
   sizes: '180x180',
   type: 'image/png',
 }

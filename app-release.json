@@ -1,8 +1,8 @@
 {
   "version": "0.1.0",
-  "revision": 34,
-  "publishedAt": "2026-10-07T14:30:50.000Z",
+  "revision": 35,
+  "publishedAt": "2026-10-07T14:38:13.000Z",
   "changes": [
-    "iPhone ana ekran ikonu önceki çalışan SOapp kalp logosuna geri döndürüldü."
+    "iPhone ana ekran ikonu Apple'ın standart dosya yoluna alındı ve eski ikon önbelleği geçersiz kılındı."
   ]
 }
