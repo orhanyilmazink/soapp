@@ -5,9 +5,9 @@ export const appIcons = [
 ]
 
 export const appleAppIcon = {
-  // Use Apple's conventional filename and rev the URL whenever the artwork
-  // changes; iOS otherwise keeps a stale home-screen icon very aggressively.
-  url: '/apple-touch-icon.png?v=35',
+  // Safari's documented site-wide Web Clip path. Keep this query-free so iOS
+  // can also discover it directly from the website root.
+  url: '/apple-touch-icon.png',
   sizes: '180x180',
   type: 'image/png',
 }
