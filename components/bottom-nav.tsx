@@ -36,12 +36,12 @@ export function BottomNav({
     <nav
       ref={navRef}
       aria-label={t("Ana menü")}
-      className="bottom-nav-dock absolute inset-x-0 bottom-0 z-40 px-4"
+      className="bottom-nav-dock absolute inset-x-0 bottom-0 z-40 px-6"
     >
       <DraggableTabList
         onSelect={index => onChange(tabs[index].id)}
         role="tablist"
-        className="bottom-nav-panel mx-auto flex max-w-md items-center justify-between gap-1 rounded-full border p-1.5"
+        className="bottom-nav-panel mx-auto flex max-w-[400px] items-center justify-between rounded-full border p-1"
       >
         {tabs.map(({ id, label, icon: Icon }) => {
           const isActive = id === active
@@ -66,23 +66,22 @@ export function BottomNav({
                 document.getElementById(`tab-${tabs[nextIndex].id}`)?.focus()
               }}
               className={cn(
-                'group relative flex flex-1 flex-col items-center gap-0.5 overflow-hidden rounded-full px-1 py-2 text-[10px] font-semibold transition-[color,transform] duration-250 ease-out',
-                isActive ? 'text-foreground' : 'scale-[0.94] text-zinc-500 hover:text-zinc-700'
+                'bottom-nav-tab group relative flex h-[54px] min-w-0 flex-1 flex-col items-center justify-center overflow-hidden rounded-full px-0.5 text-[10px] font-semibold transition-colors duration-250 ease-out',
+                isActive ? 'text-primary' : 'text-foreground'
               )}
             >
               <span
                 className={cn(
-                  'relative flex flex-col items-center gap-0.5 transition-[transform,opacity] duration-250 ease-out',
-                  isActive ? 'scale-105' : 'scale-90 opacity-80'
+                  'relative flex flex-col items-center gap-1'
                 )}
               >
                 <Icon
-                  className={cn('size-5 transition-colors duration-250 ease-out', isActive ? 'text-primary' : '')}
+                  className="size-[23px] transition-colors duration-250 ease-out"
                   aria-hidden="true"
-                  fill={isActive ? 'currentColor' : 'none'}
+                  fill={isActive && (id === 'home' || id === 'wishlist') ? 'currentColor' : 'none'}
                   strokeWidth={isActive ? 1.8 : 2}
                 />
-                <span className={cn('leading-none transition-colors duration-250', isActive ? 'font-bold text-foreground' : 'font-medium')}>
+                <span className="whitespace-nowrap leading-[12px]">
                   {id === 'achievements' && language === 'en' ? 'Awards' : t(label)}
                 </span>
               </span>

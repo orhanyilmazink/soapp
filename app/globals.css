@@ -278,6 +278,51 @@ body::before {
 .drag-tab-list:not([data-glass-ready='true']) .drag-tab-indicator { transition: none; }
 .drag-tab-list[data-dragging='true'] > button[data-drag-preview='true'] { color: var(--foreground); }
 
+/* Independent web rendering of the iOS-style tab bar. Shared category bars
+   retain their existing surfaces; only the bottom navigation uses this glass. */
+.bottom-nav-panel {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  border-color: rgb(255 255 255 / 0.72);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.7), rgb(244 243 246 / 0.56));
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: 0 8px 24px rgb(24 24 27 / 0.14),
+    inset 0 1px 1px rgb(255 255 255 / 0.96),
+    inset 0 -1px 1px rgb(24 24 27 / 0.08);
+}
+.bottom-nav-panel .drag-tab-indicator {
+  background: linear-gradient(135deg, rgb(216 212 218 / 0.54), rgb(242 219 231 / 0.4));
+  box-shadow: inset 0 1px 1px rgb(255 255 255 / 0.72), 0 2px 8px rgb(24 24 27 / 0.06);
+  transform: translate3d(var(--glass-x, 0px), var(--glass-y, 0px), 0)
+    scale(var(--glass-scale-x, 1), var(--glass-scale-y, 1))
+    rotate(var(--glass-tilt, 0deg));
+}
+.bottom-nav-tab:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -3px;
+}
+.bottom-nav-panel[data-dragging='true'] > button[data-drag-preview='true'] { color: var(--primary); }
+:root[data-theme='dark'] .bottom-nav-panel {
+  border-color: rgb(255 255 255 / 0.18);
+  background: linear-gradient(180deg, rgb(45 43 47 / 0.72), rgb(23 22 26 / 0.64));
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.34), inset 0 1px 1px rgb(255 255 255 / 0.2);
+}
+:root[data-theme='dark'] .bottom-nav-panel .drag-tab-indicator {
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.16), rgb(244 114 182 / 0.1));
+  box-shadow: inset 0 1px 1px rgb(255 255 255 / 0.16), 0 2px 8px rgb(0 0 0 / 0.12);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .bottom-nav-panel { background: #f8f6f8; }
+  :root[data-theme='dark'] .bottom-nav-panel { background: #252327; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .bottom-nav-panel { background: #f8f6f8; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  :root[data-theme='dark'] .bottom-nav-panel { background: #252327; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bottom-nav-panel .drag-tab-indicator { transition: none; }
+}
+
 :where(button, a, input, select, textarea, .date-field, [role='tab']) {
   transition-duration: var(--motion-duration);
   transition-timing-function: var(--motion-ease);
