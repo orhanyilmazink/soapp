@@ -36,6 +36,16 @@ test('older shared records migrate to empty wishlists without retaining the remo
   assert.deepEqual(plain(data.wishes), [])
   assert.equal(Object.hasOwn(data, 'specialMessage'), false)
 })
+test('legacy push subscriptions keep meetup enabled and calendar reminders opt in', () => {
+  const subscription = {
+    id: 'https://push.example/subscription',
+    endpoint: 'https://push.example/subscription',
+    expirationTime: null,
+    keys: { auth: 'auth', p256dh: 'key' },
+  }
+  const data = shared.normalize({ pushSubscriptions: [subscription] })
+  assert.deepEqual(plain(data.pushSubscriptions[0].preferences), { meetup: true, calendar: false })
+})
 test('wish normalization validates owner, trims input and bounds content', () => {
   const data = shared.normalize({ wishes: [wish('a'), { ...wish('b'), owner: 'invalid' }, { ...wish('c'), text: '  ' }, { ...wish('d'), text: 'x'.repeat(300) }] })
   assert.equal(data.wishes.length, 2)
@@ -92,6 +102,7 @@ test('bottom menu orders Wishlist third and Calendar last in both languages', ()
     const markup = renderToStaticMarkup(React.createElement(BottomNav, { active: 'wishlist', onChange() {} }))
     assert.deepEqual([...markup.matchAll(/id="tab-([^"]+)"/g)].map((match) => match[1]), ['home', 'todo', 'wishlist', 'achievements', 'calendar'])
     assert.ok(markup.includes(lang === 'en' ? 'Wishlist' : 'İstekler'))
+    assert.ok(markup.includes('lucide-shopping-basket'))
     assert.ok(!markup.includes('Özel Mesaj'))
   }
 })

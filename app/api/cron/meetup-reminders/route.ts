@@ -1,4 +1,6 @@
 import webpush from 'web-push'
+import { dueCalendarReminders } from '@/lib/calendar-reminders'
+import { config } from '@/lib/config'
 
 export const runtime = 'nodejs'
 
@@ -7,13 +9,22 @@ const day = 24 * 60 * 60 * 1000
 type StoredSubscription = {
   endpoint: string
   expirationTime: number | null
-  keys: {
-    auth: string
-    p256dh: string
-  }
+  keys: { auth: string; p256dh: string }
+  preferences?: { meetup?: boolean; calendar?: boolean }
 }
 
 type StoredState = {
+  firstName?: string
+  secondName?: string
+  togetherSince?: string
+  calendarEvents?: {
+    id: string
+    title: string
+    date: string
+    kind: 'birthday' | 'special' | 'anniversary' | 'plan' | 'celebration' | 'place'
+    repeats: boolean
+    note?: string
+  }[]
   meetupDate?: string
   meetupTime?: string
   pushSubscriptions?: StoredSubscription[]
@@ -30,274 +41,126 @@ function dateParts(date: Date, timeZone: string) {
     second: '2-digit',
     hourCycle: 'h23',
   }).formatToParts(date)
-
-  return Object.fromEntries(
-    values.map((part) => [part.type, part.value])
-  )
+  return Object.fromEntries(values.map((part) => [part.type, part.value]))
 }
 
-function meetupTimeInUtc(
-  date: string,
-  time: string,
-  timeZone: string
-) {
+function meetupTimeInUtc(date: string, time: string, timeZone: string) {
   const [year, month, dayOfMonth] = date.split('-').map(Number)
   const [hour, minute] = time.split(':').map(Number)
+  if (![year, month, dayOfMonth, hour, minute].every(Number.isFinite)) return null
 
-  if (
-    ![year, month, dayOfMonth, hour, minute].every(Number.isFinite)
-  ) {
-    return null
-  }
-
-  const requested = Date.UTC(
-    year,
-    month - 1,
-    dayOfMonth,
-    hour,
-    minute
-  )
-
+  const requested = Date.UTC(year, month - 1, dayOfMonth, hour, minute)
   let instant = requested
-
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const parts = dateParts(new Date(instant), timeZone)
-
     const actual = Date.UTC(
-      Number(parts.year),
-      Number(parts.month) - 1,
-      Number(parts.day),
-      Number(parts.hour),
-      Number(parts.minute)
+      Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute)
     )
-
     instant += requested - actual
   }
-
   return instant
 }
 
-function dueReminder(
-  meetupDate: string,
-  current: number,
-  timeZone: string
-) {
-  const [year, month, dayOfMonth] = meetupDate
-    .split('-')
-    .map(Number)
-
-  if (![year, month, dayOfMonth].every(Number.isFinite)) {
-    return null
-  }
-
+function meetupReminder(meetupDate: string, current: number, timeZone: string) {
+  const [year, month, dayOfMonth] = meetupDate.split('-').map(Number)
+  if (![year, month, dayOfMonth].every(Number.isFinite)) return null
   const today = dateParts(new Date(current), timeZone)
+  const todayAtMidnight = Date.UTC(Number(today.year), Number(today.month) - 1, Number(today.day))
+  const meetupAtMidnight = Date.UTC(year, month - 1, dayOfMonth)
+  const daysRemaining = Math.round((meetupAtMidnight - todayAtMidnight) / day)
+  return daysRemaining < 1 ? null : `Buluşmamıza son ${daysRemaining} gün kaldı!`
+}
 
-  const todayAtMidnight = Date.UTC(
-    Number(today.year),
-    Number(today.month) - 1,
-    Number(today.day)
-  )
+function preferenceEnabled(subscription: StoredSubscription, preference: 'meetup' | 'calendar') {
+  // Records from earlier versions only supported meetup notifications.
+  return preference === 'meetup'
+    ? subscription.preferences?.meetup !== false
+    : subscription.preferences?.calendar === true
+}
 
-  const meetupAtMidnight = Date.UTC(
-    year,
-    month - 1,
-    dayOfMonth
-  )
-
-  const daysRemaining = Math.round(
-    (meetupAtMidnight - todayAtMidnight) / day
-  )
-
-  // Buluşma günü veya buluşma geçmişse bildirim gönderme
-  if (daysRemaining < 1) {
-    return null
-  }
-
-  return {
-    label: `Buluşmamıza son ${daysRemaining} gün kaldı!`,
-  }
+async function sendPush(
+  subscriptions: StoredSubscription[],
+  payload: { body: string; tag: string; url?: string }
+) {
+  const message = JSON.stringify({ title: 'SOapp', ...payload })
+  const results = await Promise.allSettled(subscriptions.map(({ endpoint, expirationTime, keys }) =>
+    webpush.sendNotification({ endpoint, expirationTime, keys }, message)
+  ))
+  return results.filter((result) => result.status === 'fulfilled').length
 }
 
 export async function GET(request: Request) {
-  // Supabase Cron isteğini doğrula
-  if (
-    request.headers.get('authorization') !==
-    `Bearer ${process.env.CRON_SECRET}`
-  ) {
-    return Response.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    )
+  if (request.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabaseUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL
-
-  const supabaseKey =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  const publicKey =
-    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-
-  const privateKey =
-    process.env.VAPID_PRIVATE_KEY
-
-  if (
-    !supabaseUrl ||
-    !supabaseKey ||
-    !publicKey ||
-    !privateKey
-  ) {
-    return Response.json(
-      { error: 'Missing notification configuration' },
-      { status: 503 }
-    )
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+  const privateKey = process.env.VAPID_PRIVATE_KEY
+  if (!supabaseUrl || !supabaseKey || !publicKey || !privateKey) {
+    return Response.json({ error: 'Missing notification configuration' }, { status: 503 })
   }
 
-  // Buluşma ve push aboneliklerini Supabase'den al
-  const response = await fetch(
-    `${supabaseUrl}/rest/v1/bucket_lists?id=eq.shared&select=state`,
-    {
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-      },
-      cache: 'no-store',
-    }
-  )
-
-  if (!response.ok) {
-    return Response.json(
-      { error: 'Could not load meetup details' },
-      { status: 502 }
-    )
-  }
-
-  const rows =
-    (await response.json()) as { state?: StoredState }[]
-
-  const state = rows[0]?.state
-
-  if (
-    !state?.meetupDate ||
-    !state.meetupTime ||
-    !state.pushSubscriptions?.length
-  ) {
-    return Response.json({
-      sent: 0,
-      reason: 'No meetup or subscriptions',
-    })
-  }
-
-  const timeZone =
-    process.env.REMINDER_TIME_ZONE ||
-    'Europe/Istanbul'
-
-  const now = new Date()
-
-  // Önce buluşmanın hâlâ gelecekte olduğunu kontrol et
-  const target = meetupTimeInUtc(
-    state.meetupDate,
-    state.meetupTime,
-    timeZone
-  )
-
-  if (!target) {
-    return Response.json({
-      sent: 0,
-      reason: 'Invalid meetup time',
-    })
-  }
-
-  if (target <= now.getTime()) {
-    return Response.json({
-      sent: 0,
-      reason: 'Meetup has passed',
-    })
-  }
-
-  /*
-   * Supabase Cron her dakika endpoint'i çağırır.
-   * Bildirim yalnızca kullanıcının seçtiği
-   * buluşma saat ve dakikasında gönderilir.
-   *
-   * Örnek:
-   * meetupTime = 11:30
-   *
-   * 11:29 -> göndermez
-   * 11:30 -> gönderir
-   * 11:31 -> göndermez
-   */
-
-  const currentParts = dateParts(now, timeZone)
-
-  const [meetupHour, meetupMinute] =
-    state.meetupTime.split(':').map(Number)
-
-  if (
-    !Number.isFinite(meetupHour) ||
-    !Number.isFinite(meetupMinute)
-  ) {
-    return Response.json({
-      sent: 0,
-      reason: 'Invalid meetup time',
-    })
-  }
-
-  const currentHour = Number(currentParts.hour)
-  const currentMinute = Number(currentParts.minute)
-
-  if (
-    currentHour !== meetupHour ||
-    currentMinute !== meetupMinute
-  ) {
-    return Response.json({
-      sent: 0,
-      reason: 'Not meetup reminder time',
-      currentTime: `${currentParts.hour}:${currentParts.minute}`,
-      reminderTime: state.meetupTime,
-    })
-  }
-
-  // Kaç gün kaldığını hesapla
-  const reminder = dueReminder(
-    state.meetupDate,
-    now.getTime(),
-    timeZone
-  )
-
-  if (!reminder) {
-    return Response.json({
-      sent: 0,
-      reason: 'No reminder due',
-    })
-  }
-
-  // Push bildirimini gönder
-  webpush.setVapidDetails(
-    'https://orhanyilmazink-soapp.vercel.app',
-    publicKey,
-    privateKey
-  )
-
-  const payload = JSON.stringify({
-    title: 'SOapp',
-    body: reminder.label,
+  const response = await fetch(`${supabaseUrl}/rest/v1/bucket_lists?id=eq.shared&select=state`, {
+    headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+    cache: 'no-store',
   })
+  if (!response.ok) return Response.json({ error: 'Could not load reminder details' }, { status: 502 })
 
-  const results = await Promise.allSettled(
-    state.pushSubscriptions.map((subscription) =>
-      webpush.sendNotification(subscription, payload)
-    )
-  )
+  const rows = (await response.json()) as { state?: StoredState }[]
+  const state = rows[0]?.state
+  const subscriptions = state?.pushSubscriptions ?? []
+  if (!state || subscriptions.length === 0) return Response.json({ sent: 0, reason: 'No subscriptions' })
 
-  const sent = results.filter(
-    (result) => result.status === 'fulfilled'
-  ).length
+  const timeZone = process.env.REMINDER_TIME_ZONE || 'Europe/Istanbul'
+  const now = new Date()
+  const current = dateParts(now, timeZone)
+  const currentTime = `${current.hour}:${current.minute}`
+  const sentReminders: string[] = []
+  let sent = 0
+
+  webpush.setVapidDetails('https://orhanyilmazink-soapp.vercel.app', publicKey, privateKey)
+
+  const meetupSubscriptions = subscriptions.filter((item) => preferenceEnabled(item, 'meetup'))
+  if (state.meetupDate && state.meetupTime && currentTime === state.meetupTime && meetupSubscriptions.length > 0) {
+    const target = meetupTimeInUtc(state.meetupDate, state.meetupTime, timeZone)
+    const body = target && target > now.getTime() ? meetupReminder(state.meetupDate, now.getTime(), timeZone) : null
+    if (body) {
+      sent += await sendPush(meetupSubscriptions, { body, tag: `meetup-${current.year}-${current.month}-${current.day}` })
+      sentReminders.push(body)
+    }
+  }
+
+  const calendarSubscriptions = subscriptions.filter((item) => preferenceEnabled(item, 'calendar'))
+  const calendarTime = process.env.CALENDAR_REMINDER_TIME || '09:00'
+  if (currentTime === calendarTime && calendarSubscriptions.length > 0) {
+    const todayKey = `${current.year}-${current.month}-${current.day}`
+    const reminders = dueCalendarReminders(todayKey, {
+      firstName: state.firstName || 'Şevval',
+      secondName: state.secondName || 'Orhan',
+      togetherSince: state.togetherSince || '',
+      calendarEvents: state.calendarEvents ?? [],
+    }, [
+      { id: 'birthday-first', name: state.firstName || 'Şevval', date: config.birthDate },
+      { id: 'birthday-second', name: state.secondName || 'Orhan', date: config.senderBirthDate },
+    ])
+
+    for (const reminder of reminders) {
+      const body = `“${reminder.title}” için ${reminder.daysRemaining} gün kaldı.`
+      sent += await sendPush(calendarSubscriptions, {
+        body,
+        tag: `calendar-${reminder.id}-${reminder.daysRemaining}`.slice(0, 120),
+        url: '/',
+      })
+      sentReminders.push(body)
+    }
+  }
 
   return Response.json({
     sent,
-    reminder: reminder.label,
-    attempted: results.length,
+    reminders: sentReminders,
+    attemptedSubscriptions: subscriptions.length,
+    currentTime,
   })
 }

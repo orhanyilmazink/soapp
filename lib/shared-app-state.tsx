@@ -26,6 +26,10 @@ export type PushSubscriptionRecord = {
     auth: string
     p256dh: string
   }
+  preferences: {
+    meetup: boolean
+    calendar: boolean
+  }
 }
 export type SharedAppData = {
   version: 1
@@ -164,6 +168,11 @@ function normalizeAppData(value: unknown, fallback: SharedAppData = emptyState):
           keys: {
             auth: subscription.keys.auth.slice(0, 512),
             p256dh: subscription.keys.p256dh.slice(0, 512),
+          },
+          preferences: {
+            // Existing subscriptions were created by the meetup-only control.
+            meetup: subscription.preferences?.meetup !== false,
+            calendar: subscription.preferences?.calendar === true,
           },
         }))
       : fallback.pushSubscriptions,

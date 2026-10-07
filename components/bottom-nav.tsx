@@ -4,7 +4,7 @@ import { useLanguage } from '@/lib/language'
 import { useLayoutEffect, useRef } from 'react'
 import { attachViewportDock } from '@/lib/viewport-dock'
 
-import { Award, CalendarDays, House, ListChecks, Heart, type LucideIcon } from 'lucide-react'
+import { Award, CalendarDays, House, ListChecks, ShoppingBasket, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DraggableTabList } from '@/components/draggable-tab-list'
 
@@ -13,7 +13,7 @@ export type TabId = 'home' | 'calendar' | 'achievements' | 'todo' | 'wishlist'
 const tabs: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'home', label: 'Ana Sayfa', icon: House },
   { id: 'todo', label: 'Yapılacaklar', icon: ListChecks },
-  { id: 'wishlist', label: 'İstekler', icon: Heart },
+  { id: 'wishlist', label: 'İstekler', icon: ShoppingBasket },
   { id: 'achievements', label: 'Başarımlar', icon: Award },
   { id: 'calendar', label: 'Takvim', icon: CalendarDays },
 ]
@@ -78,7 +78,7 @@ export function BottomNav({
                 <Icon
                   className="size-[23px] transition-colors duration-250 ease-out"
                   aria-hidden="true"
-                  fill={isActive && (id === 'home' || id === 'wishlist') ? 'currentColor' : 'none'}
+                  fill={isActive && id === 'home' ? 'currentColor' : 'none'}
                   strokeWidth={isActive ? 1.8 : 2}
                 />
                 <span className="whitespace-nowrap leading-[12px]">

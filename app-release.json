@@ -1,8 +1,10 @@
 {
   "version": "0.1.0",
-  "revision": 32,
-  "publishedAt": "2026-10-07T13:58:36.000Z",
+  "revision": 33,
+  "publishedAt": "2026-10-07T14:18:46.000Z",
   "changes": [
-    "Yapılacaklar ve Başarımlar kategori navigasyonları alt menüyle aynı cam görünümüne uyarlandı."
+    "Yapılacaklar ve Başarımlar kategori navigasyonları alt menüyle aynı cam görünümüne uyarlandı.",
+    "Takvim etkinlikleri için 14, 7 ve 1 gün kala gönderilen bildirimler Ayarlar’a eklendi.",
+    "İstekler sekmesi sepet simgesiyle ve Mac uygulama ikonu koyu zeminle güncellendi."
   ]
 }
