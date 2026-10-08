@@ -5,7 +5,7 @@ import { ServiceWorkerRegister } from '@/components/sw-register'
 import { AppUpdates } from '@/components/app-updates'
 import { PinchZoomLock } from '@/components/pinch-zoom-lock'
 import { LanguageProvider } from '@/lib/language'
-import { appIcons, appleAppIcon } from '@/lib/app-icons'
+import { appIcons } from '@/lib/app-icons'
 import './globals.css'
 
 const nunito = Nunito({ subsets: ['latin', 'latin-ext'], variable: '--font-nunito' })
@@ -25,8 +25,7 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
   },
   icons: {
-    icon: appIcons.map(({ src, ...icon }) => ({ url: src, ...icon })),
-    apple: [appleAppIcon],
+    icon: appIcons.map(({ src, sizes, type }) => ({ url: src, sizes, type })),
   },
 }
 

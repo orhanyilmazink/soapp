@@ -1,8 +1,8 @@
 {
   "version": "0.1.0",
-  "revision": 36,
-  "publishedAt": "2026-10-07T14:43:03.000Z",
+  "revision": 37,
+  "publishedAt": "2026-10-08T11:11:41.000Z",
   "changes": [
-    "iPhone ana ekran ikonu Apple'ın standart kök yolunda sorgusuz ve opak PNG olarak sunulmaya başlandı."
+    "iOS ana ekran ikonu opak, tam kare manifest görsellerine geçirildi ve monogram fallback'i kaldırıldı."
   ]
 }

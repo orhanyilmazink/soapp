@@ -1,5 +1,5 @@
-const CACHE = 'soapp-v13'
-const PRECACHE = ['/', '/icon-restored-192.png', '/icon-restored-512.png', '/apple-touch-icon.png', '/manifest.webmanifest']
+const CACHE = 'soapp-v14'
+const PRECACHE = ['/', '/icon-unified-192.png', '/icon-unified-512.png', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
